@@ -1,0 +1,5 @@
+{
+  "name": "Registo de Atendimentos Turísticos",
+  "description": "Uma aplicação para postos de turismo que permite aos colaboradores registar atendimentos por nacionalidade e gerar relatórios de desempenho. Facilita o registo rápido através de atalhos e oferece visualizações de dados semanais, mensais, trimestrais e anuais.",
+  "requestFramePermissions": []
+}
