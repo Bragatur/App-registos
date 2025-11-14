@@ -218,16 +218,14 @@ const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove,
                   {collab.id === currentAdminId && <span className="ml-2 text-xs font-bold text-white bg-green-600 px-2 py-0.5 rounded-full">Você</span>}
                 </div>
                 <div>
-                  {collab.name.toLowerCase() !== 'admin' && (
-                    <button 
-                      onClick={() => setManagingUser(collab)}
-                      className="flex items-center gap-1.5 text-slate-600 hover:bg-slate-200 font-semibold p-2 rounded-md transition-colors text-sm"
-                      title={`Gerir ${collab.name}`}
-                    >
-                      <CogIcon className="w-4 h-4" />
-                      <span>Gerir</span>
-                    </button>
-                  )}
+                  <button 
+                    onClick={() => setManagingUser(collab)}
+                    className="flex items-center gap-1.5 text-slate-600 hover:bg-slate-200 font-semibold p-2 rounded-md transition-colors text-sm"
+                    title={`Gerir ${collab.name}`}
+                  >
+                    <CogIcon className="w-4 h-4" />
+                    <span>Gerir</span>
+                  </button>
                 </div>
               </li>
             ))}

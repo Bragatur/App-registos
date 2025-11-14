@@ -133,7 +133,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, addCollaborator, requestPassword
     resetCreateForm();
   }
   
-  const approvedUsers = collaborators.filter(c => c.status === 'aprovado');
+  const approvedUsers = collaborators.filter(c => c.status === 'aprovado' && c.name.toLowerCase() !== 'admin');
 
   return (
     <>
@@ -216,7 +216,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, addCollaborator, requestPassword
                     ))}
                 </ul>
              ) : (
-                <p className="text-slate-500">Não existem utilizadores aprovados.</p>
+                <p className="text-slate-500">Não existem utilizadores aprovados para além da conta de gestão.</p>
              )}
            </div>
         </div>
