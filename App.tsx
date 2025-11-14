@@ -5,6 +5,7 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Reports from './components/Reports';
 import Header from './components/Header';
+import Admin from './components/Admin';
 
 const App: React.FC = () => {
   const [collaborators, setCollaborators] = useLocalStorage<Collaborator[]>('tourist_app_collaborators', []);
@@ -13,6 +14,11 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('login');
 
   const handleLogin = (collaborator: Collaborator) => {
+    if (collaborator.status !== 'aprovado') {
+      // This case should be handled in Login component, but as a safeguard:
+      alert('A sua conta aguarda aprovação.');
+      return;
+    }
     setCurrentCollaborator(collaborator);
     setCurrentView('dashboard');
   };
@@ -23,11 +29,28 @@ const App: React.FC = () => {
   };
 
   const addCollaborator = (name: string): Collaborator => {
-    const newCollaborator: Collaborator = { id: `colab_${Date.now()}`, name };
+    const isFirstUser = collaborators.length === 0;
+    const newCollaborator: Collaborator = {
+      id: `colab_${Date.now()}`,
+      name,
+      isAdmin: isFirstUser,
+      status: isFirstUser ? 'aprovado' : 'pendente',
+    };
     setCollaborators([...collaborators, newCollaborator]);
     return newCollaborator;
   };
 
+  const approveCollaborator = (id: string) => {
+    setCollaborators(
+      collaborators.map(c => (c.id === id ? { ...c, status: 'aprovado' } : c))
+    );
+  };
+
+  const rejectCollaborator = (id: string) => {
+    // Rejecting is the same as deleting the pending user
+    setCollaborators(collaborators.filter(c => c.id !== id));
+  };
+  
   const deleteCollaborator = (id: string) => {
     // Remove collaborator and all their interactions
     setCollaborators(collaborators.filter(c => c.id !== id));
@@ -60,7 +83,7 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     if (!currentCollaborator || currentView === 'login') {
-      return <Login collaborators={collaborators} onLogin={handleLogin} addCollaborator={addCollaborator} deleteCollaborator={deleteCollaborator} />;
+      return <Login collaborators={collaborators} onLogin={handleLogin} addCollaborator={addCollaborator} />;
     }
 
     switch (currentView) {
@@ -76,8 +99,18 @@ const App: React.FC = () => {
         );
       case 'reports':
         return <Reports allInteractions={interactions} collaborators={collaborators} />;
+      case 'admin':
+        return (
+          <Admin
+            collaborators={collaborators}
+            currentAdminId={currentCollaborator.id}
+            onApprove={approveCollaborator}
+            onReject={rejectCollaborator}
+            onDelete={deleteCollaborator}
+          />
+        );
       default:
-        return <Login collaborators={collaborators} onLogin={handleLogin} addCollaborator={addCollaborator} deleteCollaborator={deleteCollaborator} />;
+        return <Login collaborators={collaborators} onLogin={handleLogin} addCollaborator={addCollaborator} />;
     }
   };
 

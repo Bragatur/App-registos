@@ -66,6 +66,12 @@ const InteractionRow: React.FC<{
             handleCancel();
         }
     }
+    
+    const handleDelete = () => {
+        if (window.confirm('Tem a certeza que deseja eliminar este registo? Esta ação não pode ser desfeita.')) {
+            onDelete(interaction.id);
+        }
+    };
 
     if (isEditing) {
         return (
@@ -143,7 +149,7 @@ const InteractionRow: React.FC<{
                     <button onClick={() => setIsEditing(true)} className="text-slate-500 hover:text-blue-600 p-2 rounded-full hover:bg-blue-100 transition-colors" aria-label="Editar">
                         <EditIcon className="w-5 h-5" />
                     </button>
-                    <button onClick={() => {if(window.confirm('Tem a certeza que deseja eliminar este registo?')) {onDelete(interaction.id)}}} className="text-slate-500 hover:text-red-600 p-2 rounded-full hover:bg-red-100 transition-colors" aria-label="Eliminar">
+                    <button onClick={handleDelete} className="text-slate-500 hover:text-red-600 p-2 rounded-full hover:bg-red-100 transition-colors" aria-label="Eliminar">
                         <TrashIcon className="w-5 h-5" />
                     </button>
                 </div>
@@ -210,7 +216,7 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
 
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-1 space-y-8">
+            <div className="lg:col-span-1">
                 
                 {/* Add Interaction Form */}
                 <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
@@ -230,6 +236,18 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
                                     className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     required
                                 />
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {QUICK_ACCESS_NATIONALITIES.map((nat) => (
+                                <button
+                                    key={nat}
+                                    type="button"
+                                    onClick={() => handleQuickAccessClick(nat)}
+                                    className="bg-slate-100 hover:bg-blue-100 hover:text-blue-700 text-slate-600 font-medium py-1.5 px-3 rounded-full text-sm transition-colors"
+                                >
+                                    {nat}
+                                </button>
+                                ))}
                             </div>
                         </div>
 
@@ -281,23 +299,6 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
                         </button>
                     </form>
                 </div>
-
-                {/* Quick Access */}
-                <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-                    <h2 className="text-xl font-bold mb-4 text-slate-800">Atalhos Rápidos</h2>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {QUICK_ACCESS_NATIONALITIES.map((nat) => (
-                        <button
-                            key={nat}
-                            onClick={() => handleQuickAccessClick(nat)}
-                            className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold py-3 px-2 rounded-lg transition-transform transform hover:scale-105 text-center text-sm"
-                        >
-                            {nat}
-                        </button>
-                        ))}
-                    </div>
-                </div>
-
             </div>
 
             {/* Recent Interactions */}

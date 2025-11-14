@@ -1,6 +1,8 @@
 export interface Collaborator {
   id: string;
   name: string;
+  isAdmin: boolean;
+  status: 'aprovado' | 'pendente';
 }
 
 export interface Interaction {
@@ -13,6 +15,6 @@ export interface Interaction {
   lengthOfStay?: string;
 }
 
-export type View = 'login' | 'dashboard' | 'reports';
+export type View = 'login' | 'dashboard' | 'reports' | 'admin';
 
 export type ReportPeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly';

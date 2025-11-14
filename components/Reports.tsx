@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Interaction, Collaborator, ReportPeriod } from '../types';
+import { ALL_NATIONALITIES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { DownloadIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon } from './icons';
+import { DownloadIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon } from './icons';
 
 interface ReportsProps {
   allInteractions: Interaction[];
@@ -23,6 +24,7 @@ const KpiCard: React.FC<{ title: string; value: string | number; icon: React.Rea
 const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => {
   const [period, setPeriod] = useState<ReportPeriod>('monthly');
   const [selectedCollaborator, setSelectedCollaborator] = useState<string>('all');
+  const [nationalityFilter, setNationalityFilter] = useState<string>('');
 
   const filteredInteractions = useMemo(() => {
     const now = new Date();
@@ -49,9 +51,10 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     return allInteractions.filter(interaction => {
         const interactionDate = new Date(interaction.timestamp);
         const collaboratorMatch = selectedCollaborator === 'all' || interaction.collaboratorId === selectedCollaborator;
-        return interactionDate >= startDate && interactionDate <= now && collaboratorMatch;
+        const nationalityMatch = !nationalityFilter || interaction.nationality.toLowerCase().includes(nationalityFilter.toLowerCase());
+        return interactionDate >= startDate && interactionDate <= now && collaboratorMatch && nationalityMatch;
     });
-  }, [allInteractions, period, selectedCollaborator]);
+  }, [allInteractions, period, selectedCollaborator, nationalityFilter]);
 
   const nationalityData = useMemo(() => {
     const counts: { [key: string]: number } = {};
@@ -125,7 +128,6 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
         .map(({date, visitantes}) => ({date, visitantes})); // Remove sortableDate
   }, [filteredInteractions, period]);
 
-// FIX: Implement data aggregation for visit reason and length of stay to fix error and implement charts.
   const visitReasonData = useMemo(() => {
     const counts: { [key: string]: number } = {};
     filteredInteractions.forEach(interaction => {
@@ -178,8 +180,9 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     if (link.download !== undefined) {
         const url = URL.createObjectURL(blob);
         const collaboratorName = selectedCollaborator === 'all' ? 'todos' : collaborators.find(c => c.id === selectedCollaborator)?.name || 'desconhecido';
+        const nationalityName = nationalityFilter ? nationalityFilter.replace(/\s/g, '_') : 'todas';
         link.setAttribute("href", url);
-        link.setAttribute("download", `relatorio_visitantes_${period}_${collaboratorName.replace(/\s/g, '_')}.csv`);
+        link.setAttribute("download", `relatorio_${period}_${collaboratorName}_${nationalityName}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
@@ -198,6 +201,9 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
+      <datalist id="nationalities-filter">
+            {ALL_NATIONALITIES.map(nat => <option key={nat} value={nat} />)}
+      </datalist>
         {/* Header and Filters */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-3xl font-bold text-slate-800">Relatórios</h2>
@@ -223,6 +229,17 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                     <option value="all">Todos os Colaboradores</option>
                     {collaborators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
+                <div className="relative">
+                    <SearchIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"/>
+                    <input 
+                        type="text"
+                        list="nationalities-filter"
+                        placeholder="Filtrar nacionalidade..."
+                        value={nationalityFilter}
+                        onChange={(e) => setNationalityFilter(e.target.value)}
+                        className="pl-9 pr-3 py-2 w-48 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                </div>
                 <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors">
                     <DownloadIcon className="w-5 h-5" />
                     <span>Exportar</span>
