@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Collaborator } from '../types';
+import { Collaborator, PRIMARY_ADMIN_ID } from '../types';
 import { UserPlusIcon, LogInIcon, MailIcon } from './icons';
 
 interface PasswordRecoveryModalProps {
@@ -133,7 +133,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, addCollaborator, requestPassword
     resetCreateForm();
   }
   
-  const approvedUsers = collaborators.filter(c => c.status === 'aprovado' && c.name.toLowerCase() !== 'admin');
+  const approvedUsers = collaborators.filter(c => c.status === 'aprovado' && c.id !== PRIMARY_ADMIN_ID);
 
   return (
     <>

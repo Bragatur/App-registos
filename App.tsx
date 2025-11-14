@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Collaborator, Interaction, View } from './types';
+import { Collaborator, Interaction, View, PRIMARY_ADMIN_ID } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -14,29 +13,27 @@ const App: React.FC = () => {
   const [currentCollaborator, setCurrentCollaborator] = useState<Collaborator | null>(null);
   const [currentView, setCurrentView] = useState<View>('login');
   
-  // Effect to ensure the default admin account exists and is correctly configured on startup.
   useEffect(() => {
     const ADMIN_USERNAME = 'admin';
     const ADMIN_EMAIL = 'braga.turismo.2024@gmail.com';
-    const OLD_ADMIN_USERNAME = 'vitor.afonso';
 
     setCollaborators(prev => {
       let updatedCollaborators = [...prev];
-      let primaryAdmin = updatedCollaborators.find(c => c.name.toLowerCase() === ADMIN_USERNAME);
-      const oldAdminAccount = updatedCollaborators.find(c => c.name.toLowerCase() === OLD_ADMIN_USERNAME);
+      let primaryAdmin = updatedCollaborators.find(c => c.id === PRIMARY_ADMIN_ID);
 
       if (!primaryAdmin) {
-        // If 'admin' doesn't exist, check if we can migrate 'vitor.afonso'
-        if (oldAdminAccount) {
-          updatedCollaborators = updatedCollaborators.map(c =>
-            c.id === oldAdminAccount.id
-              ? { ...c, name: ADMIN_USERNAME, email: ADMIN_EMAIL, isAdmin: true, status: 'aprovado' }
+        let potentialAdmin = updatedCollaborators.find(c => c.name.toLowerCase() === ADMIN_USERNAME.toLowerCase() || c.name.toLowerCase() === 'vitor.afonso');
+        
+        if (potentialAdmin) {
+           updatedCollaborators = updatedCollaborators.map(c => 
+            c.id === potentialAdmin.id 
+              ? { ...c, id: PRIMARY_ADMIN_ID, name: ADMIN_USERNAME, email: ADMIN_EMAIL, isAdmin: true, status: 'aprovado' } 
               : c
           );
+           updatedCollaborators = updatedCollaborators.filter(c => c.id === PRIMARY_ADMIN_ID || c.name.toLowerCase() !== ADMIN_USERNAME.toLowerCase());
         } else {
-          // If neither exists, create the new 'admin' account
           const defaultAdmin: Collaborator = {
-            id: `colab_${ADMIN_USERNAME}_default`,
+            id: PRIMARY_ADMIN_ID,
             name: ADMIN_USERNAME,
             email: ADMIN_EMAIL,
             password: 'admin',
@@ -46,19 +43,23 @@ const App: React.FC = () => {
           updatedCollaborators.push(defaultAdmin);
         }
       } else {
-        // If 'admin' exists, ensure it's correctly configured and remove the old one if it exists as a separate user
-        updatedCollaborators = updatedCollaborators.map(c =>
-          c.id === primaryAdmin.id
-            ? { ...c, email: ADMIN_EMAIL, isAdmin: true, status: 'aprovado' }
+        updatedCollaborators = updatedCollaborators.map(c => 
+          c.id === PRIMARY_ADMIN_ID
+            ? { ...c, email: ADMIN_EMAIL, name: c.name || ADMIN_USERNAME, isAdmin: true, status: 'aprovado' }
             : c
         );
-        if (oldAdminAccount && oldAdminAccount.id !== primaryAdmin.id) {
-          updatedCollaborators = updatedCollaborators.filter(c => c.id !== oldAdminAccount.id);
-        }
       }
       return updatedCollaborators;
     });
   }, [setCollaborators]);
+
+  // Sincroniza as interações para remover registos órfãos quando um colaborador é eliminado.
+  useEffect(() => {
+    const collaboratorIds = new Set(collaborators.map(c => c.id));
+    if (collaboratorIds.size > 0) {
+      setInteractions(prev => prev.filter(i => collaboratorIds.has(i.collaboratorId)));
+    }
+  }, [collaborators, setInteractions]);
 
 
   const handleLogin = (name: string, password: string): { success: boolean, message: string } => {
@@ -119,14 +120,14 @@ const App: React.FC = () => {
   
   const deleteCollaborator = (id: string) => {
     setCollaborators(prevCollaborators => {
-        const targetUser = prevCollaborators.find(c => c.id === id);
-        if (!targetUser) return prevCollaborators;
-        
-        if (targetUser.name.toLowerCase() === 'admin') {
+        if (id === PRIMARY_ADMIN_ID) {
             alert('Não é possível eliminar a conta de administrador principal.');
             return prevCollaborators;
         }
 
+        const targetUser = prevCollaborators.find(c => c.id === id);
+        if (!targetUser) return prevCollaborators;
+        
         if (targetUser.isAdmin) {
           const adminCount = prevCollaborators.filter(c => c.isAdmin).length;
           if (adminCount <= 1) {
@@ -135,17 +136,11 @@ const App: React.FC = () => {
           }
         }
         
-        setInteractions(prevInteractions => prevInteractions.filter(i => i.collaboratorId !== id));
         return prevCollaborators.filter(c => c.id !== id);
     });
   };
 
   const resetUserPassword = (userId: string, newPassword: string) => {
-    const targetUser = collaborators.find(c => c.id === userId);
-    if (targetUser?.name.toLowerCase() === 'admin' && currentCollaborator?.id !== targetUser.id) {
-      alert('A password do administrador principal não pode ser alterada a partir deste painel.');
-      return;
-    }
     setCollaborators(prev =>
       prev.map(c => (c.id === userId ? { ...c, password: newPassword } : c))
     );
@@ -157,7 +152,6 @@ const App: React.FC = () => {
       return { success: false, message: "Não foi encontrada nenhuma conta com este email." };
     }
     
-    // Simulate sending an email by generating a new password and showing it to the user.
     const newPassword = Math.random().toString(36).slice(-8);
     resetUserPassword(userToReset.id, newPassword);
 
@@ -166,18 +160,19 @@ const App: React.FC = () => {
 
   const toggleAdminStatus = (userId: string) => {
     setCollaborators(prev => {
-        const targetUser = prev.find(c => c.id === userId);
-        if (!targetUser) return prev;
-
-        if (targetUser.name.toLowerCase() === 'admin') {
+        if (userId === PRIMARY_ADMIN_ID) {
             alert('Não é possível remover os privilégios da conta de administrador principal.');
             return prev;
         }
+        const targetUser = prev.find(c => c.id === userId);
+        if (!targetUser) return prev;
 
-        const adminCount = prev.filter(c => c.isAdmin).length;
-        if (targetUser.isAdmin && adminCount <= 1) {
-          alert('Não é possível remover os privilégios do último administrador.');
-          return prev;
+        if (targetUser.isAdmin) {
+            const adminCount = prev.filter(c => c.isAdmin).length;
+            if (adminCount <= 1) {
+              alert('Não é possível remover os privilégios do último administrador.');
+              return prev;
+            }
         }
         
         return prev.map(c => (c.id === userId ? { ...c, isAdmin: !c.isAdmin } : c));
@@ -185,15 +180,6 @@ const App: React.FC = () => {
   };
 
   const updateCollaboratorProfile = (id: string, newName: string, newPass: string) => {
-    const userToUpdate = collaborators.find(c => c.id === id);
-    
-    // Admin user name cannot be changed
-    if (userToUpdate?.name.toLowerCase() === 'admin' && userToUpdate.name.toLowerCase() !== newName.trim().toLowerCase()) {
-        alert('O nome de utilizador do administrador principal não pode ser alterado.');
-        return;
-    }
-
-    // Check if new name already exists for another user
     if (collaborators.some(c => c.id !== id && c.name.toLowerCase() === newName.trim().toLowerCase())) {
       alert('Já existe um colaborador com este nome.');
       return;
@@ -205,11 +191,9 @@ const App: React.FC = () => {
           const updatedCollaborator = {
             ...c,
             name: newName.trim(),
-            // Only update password if new one is provided
             password: newPass ? newPass : c.password,
           };
 
-          // If the currently logged-in user is the one being updated, update their state too.
           if (currentCollaborator?.id === id) {
             setCurrentCollaborator(updatedCollaborator);
           }

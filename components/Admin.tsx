@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Collaborator } from '../types';
+import { Collaborator, PRIMARY_ADMIN_ID } from '../types';
 import { UsersIcon, CheckCircleIcon, XCircleIcon, CogIcon } from './icons';
 
 interface ManageUserModalProps {
   user: Collaborator;
   isSelf: boolean;
+  isPrimaryAdmin: boolean;
   onClose: () => void;
   onUpdateProfile: (id: string, newName: string, newPass: string) => void;
   onResetPassword: (id: string, newPass: string) => void;
@@ -12,7 +13,7 @@ interface ManageUserModalProps {
   onDelete: (id: string) => void;
 }
 
-const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose, onUpdateProfile, onResetPassword, onToggleAdmin, onDelete }) => {
+const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, isPrimaryAdmin, onClose, onUpdateProfile, onResetPassword, onToggleAdmin, onDelete }) => {
   const [newName, setNewName] = useState(user.name);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -25,19 +26,18 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
       setError('As passwords não coincidem ou estão em branco.');
       return;
     }
-    if (isSelf) {
-      onUpdateProfile(user.id, newName, newPassword);
-      alert(`O seu perfil foi atualizado com sucesso.`);
-    } else {
-      onResetPassword(user.id, newPassword);
-      alert(`Password para ${user.name} foi redefinida com sucesso.`);
-    }
+    onResetPassword(user.id, newPassword);
+    alert(`Password para ${user.name} foi redefinida com sucesso.`);
     onClose();
   };
   
   const handleProfileUpdate = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+     if (newName.trim() === '') {
+      setError('O nome de utilizador não pode estar em branco.');
+      return;
+    }
     if (newPassword && newPassword !== confirmPassword) {
       setError('As passwords não coincidem.');
       return;
@@ -99,7 +99,6 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
         </div>
         
-        {/* Reset Password */}
         <form onSubmit={handlePasswordReset} className="space-y-3 border-t pt-4">
           <h4 className="font-semibold text-slate-700">Redefinir Password</h4>
           <div>
@@ -114,21 +113,23 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
           <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors">Redefinir Password</button>
         </form>
 
-        {/* Admin Actions */}
-        <div className="space-y-3 border-t pt-4">
-            <h4 className="font-semibold text-slate-700">Permissões</h4>
-             <button onClick={handleToggleAdmin} className="w-full text-left bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-semibold px-4 py-3 rounded-lg transition-colors">
-                {user.isAdmin ? 'Remover Privilégios de Administrador' : 'Promover a Administrador'}
-             </button>
-        </div>
+        {!isPrimaryAdmin && (
+            <>
+                <div className="space-y-3 border-t pt-4">
+                    <h4 className="font-semibold text-slate-700">Permissões</h4>
+                    <button onClick={handleToggleAdmin} className="w-full text-left bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-semibold px-4 py-3 rounded-lg transition-colors">
+                        {user.isAdmin ? 'Remover Privilégios de Administrador' : 'Promover a Administrador'}
+                    </button>
+                </div>
 
-        {/* Delete Action */}
-        <div className="space-y-3 border-t pt-4">
-             <h4 className="font-semibold text-red-700">Zona de Perigo</h4>
-             <button onClick={handleDelete} className="w-full text-left bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-3 rounded-lg transition-colors">
-                Eliminar Utilizador Permanentemente
-             </button>
-        </div>
+                <div className="space-y-3 border-t pt-4">
+                    <h4 className="font-semibold text-red-700">Zona de Perigo</h4>
+                    <button onClick={handleDelete} className="w-full text-left bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-3 rounded-lg transition-colors">
+                        Eliminar Utilizador Permanentemente
+                    </button>
+                </div>
+            </>
+        )}
 
         <div className="text-right border-t pt-4">
           <button onClick={onClose} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-4 py-2 rounded-lg transition-colors">Fechar</button>
@@ -167,7 +168,6 @@ const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove,
       <div className="max-w-4xl mx-auto space-y-8">
         <h2 className="text-3xl font-bold text-slate-800">Painel de Administração</h2>
 
-        {/* Pending Registrations */}
         <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
           <h3 className="text-xl font-bold mb-4 text-slate-800">Registos Pendentes ({pendingCollaborators.length})</h3>
           {pendingCollaborators.length > 0 ? (
@@ -202,7 +202,6 @@ const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove,
           )}
         </div>
 
-        {/* Approved Users */}
         <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
           <h3 className="text-xl font-bold mb-4 text-slate-800 flex items-center">
               <UsersIcon className="w-6 h-6 mr-3 text-blue-600"/>
@@ -237,6 +236,7 @@ const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove,
         <ManageUserModal 
           user={managingUser}
           isSelf={managingUser.id === currentAdminId}
+          isPrimaryAdmin={managingUser.id === PRIMARY_ADMIN_ID}
           onClose={() => setManagingUser(null)}
           onResetPassword={onResetPassword}
           onToggleAdmin={onToggleAdmin}

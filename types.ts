@@ -1,3 +1,5 @@
+export const PRIMARY_ADMIN_ID = 'primary_admin_account';
+
 export interface Collaborator {
   id: string;
   name: string;
