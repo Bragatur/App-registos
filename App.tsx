@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Collaborator, Interaction, View } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
 import Login from './components/Login';
@@ -12,15 +12,54 @@ const App: React.FC = () => {
   const [interactions, setInteractions] = useLocalStorage<Interaction[]>('tourist_app_interactions', []);
   const [currentCollaborator, setCurrentCollaborator] = useState<Collaborator | null>(null);
   const [currentView, setCurrentView] = useState<View>('login');
+  
+  // Effect to ensure the default admin account exists and is correctly configured on startup.
+  useEffect(() => {
+    setCollaborators(prev => {
+      let updatedCollaborators = [...prev];
+      const adminAccount = updatedCollaborators.find(c => c.name.toLowerCase() === 'admin');
 
-  const handleLogin = (collaborator: Collaborator) => {
-    if (collaborator.status !== 'aprovado') {
-      // This case should be handled in Login component, but as a safeguard:
-      alert('A sua conta aguarda aprovação.');
-      return;
+      if (!adminAccount) {
+        // If 'admin' user doesn't exist, create it.
+        const defaultAdmin: Collaborator = {
+          id: 'colab_admin_default',
+          name: 'admin',
+          password: 'admin',
+          isAdmin: true,
+          status: 'aprovado',
+        };
+        updatedCollaborators.push(defaultAdmin);
+      } else {
+        // If 'admin' user exists, ensure it has admin rights and is approved.
+        if (!adminAccount.isAdmin || adminAccount.status !== 'aprovado') {
+          updatedCollaborators = updatedCollaborators.map(c =>
+            c.id === adminAccount.id
+              ? { ...c, isAdmin: true, status: 'aprovado' }
+              : c
+          );
+        }
+      }
+      return updatedCollaborators;
+    });
+  }, [setCollaborators]);
+
+
+  const handleLogin = (name: string, password: string): { success: boolean, message: string } => {
+    const collaborator = collaborators.find(c => c.name.toLowerCase() === name.toLowerCase());
+
+    if (!collaborator) {
+      return { success: false, message: 'Utilizador não encontrado.' };
     }
+    if (collaborator.password !== password) {
+      return { success: false, message: 'Password incorreta.' };
+    }
+    if (collaborator.status !== 'aprovado') {
+      return { success: false, message: 'A sua conta aguarda aprovação de um administrador.' };
+    }
+    
     setCurrentCollaborator(collaborator);
     setCurrentView('dashboard');
+    return { success: true, message: 'Login bem-sucedido!' };
   };
 
   const handleLogout = () => {
@@ -28,16 +67,23 @@ const App: React.FC = () => {
     setCurrentView('login');
   };
 
-  const addCollaborator = (name: string): Collaborator => {
-    const isFirstUser = collaborators.length === 0;
+  const addCollaborator = (name: string, password: string): { success: boolean, message: string, collaborator?: Collaborator } => {
+    if (name.trim().toLowerCase() === 'admin') {
+      return { success: false, message: 'O nome de utilizador "admin" é reservado.' };
+    }
+    if (collaborators.some(c => c.name.toLowerCase() === name.trim().toLowerCase())) {
+        return { success: false, message: 'Já existe um colaborador com este nome.' };
+    }
+    
     const newCollaborator: Collaborator = {
       id: `colab_${Date.now()}`,
-      name,
-      isAdmin: isFirstUser,
-      status: isFirstUser ? 'aprovado' : 'pendente',
+      name: name.trim(),
+      password,
+      isAdmin: false, // New users are never admins by default
+      status: 'pendente',
     };
     setCollaborators([...collaborators, newCollaborator]);
-    return newCollaborator;
+    return { success: true, message: "Utilizador criado com sucesso.", collaborator: newCollaborator };
   };
 
   const approveCollaborator = (id: string) => {
@@ -47,14 +93,59 @@ const App: React.FC = () => {
   };
 
   const rejectCollaborator = (id: string) => {
-    // Rejecting is the same as deleting the pending user
     setCollaborators(collaborators.filter(c => c.id !== id));
   };
   
   const deleteCollaborator = (id: string) => {
-    // Remove collaborator and all their interactions
+    const targetUser = collaborators.find(c => c.id === id);
+    if (!targetUser) return;
+    
+    if (targetUser.name.toLowerCase() === 'admin') {
+        alert('Não é possível eliminar a conta de administrador principal.');
+        return;
+    }
+
+    if (targetUser.isAdmin) {
+      const adminCount = collaborators.filter(c => c.isAdmin).length;
+      if (adminCount <= 1) {
+        alert('Não é possível eliminar o último administrador da aplicação.');
+        return;
+      }
+    }
+
     setCollaborators(collaborators.filter(c => c.id !== id));
     setInteractions(interactions.filter(i => i.collaboratorId !== id));
+  };
+
+  const resetUserPassword = (userId: string, newPassword: string) => {
+    const targetUser = collaborators.find(c => c.id === userId);
+    if (targetUser?.name.toLowerCase() === 'admin') {
+      alert('A password do administrador principal não pode ser alterada a partir deste painel.');
+      return;
+    }
+    setCollaborators(prev =>
+      prev.map(c => (c.id === userId ? { ...c, password: newPassword } : c))
+    );
+  };
+
+  const toggleAdminStatus = (userId: string) => {
+    const targetUser = collaborators.find(c => c.id === userId);
+    if (!targetUser) return;
+
+    if (targetUser.name.toLowerCase() === 'admin') {
+        alert('Não é possível remover os privilégios da conta de administrador principal.');
+        return;
+    }
+
+    const adminCount = collaborators.filter(c => c.isAdmin).length;
+    if (targetUser.isAdmin && adminCount <= 1) {
+      alert('Não é possível remover os privilégios do último administrador.');
+      return;
+    }
+
+    setCollaborators(prev =>
+      prev.map(c => (c.id === userId ? { ...c, isAdmin: !c.isAdmin } : c))
+    );
   };
 
   const addInteraction = (nationality: string, count: number, visitReason?: string, lengthOfStay?: string) => {
@@ -83,7 +174,7 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     if (!currentCollaborator || currentView === 'login') {
-      return <Login collaborators={collaborators} onLogin={handleLogin} addCollaborator={addCollaborator} />;
+      return <Login onLogin={handleLogin} addCollaborator={addCollaborator} />;
     }
 
     switch (currentView) {
@@ -107,10 +198,12 @@ const App: React.FC = () => {
             onApprove={approveCollaborator}
             onReject={rejectCollaborator}
             onDelete={deleteCollaborator}
+            onResetPassword={resetUserPassword}
+            onToggleAdmin={toggleAdminStatus}
           />
         );
       default:
-        return <Login collaborators={collaborators} onLogin={handleLogin} addCollaborator={addCollaborator} />;
+        return <Login onLogin={handleLogin} addCollaborator={addCollaborator} />;
     }
   };
 
