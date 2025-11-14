@@ -1,6 +1,7 @@
 export interface Collaborator {
   id: string;
   name: string;
+  email: string; // Adicionado para recuperação de password
   password: string; // Adicionado para segurança
   isAdmin: boolean;
   status: 'aprovado' | 'pendente';

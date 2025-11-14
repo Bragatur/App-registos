@@ -4,13 +4,16 @@ import { UsersIcon, CheckCircleIcon, XCircleIcon, CogIcon } from './icons';
 
 interface ManageUserModalProps {
   user: Collaborator;
+  isSelf: boolean;
   onClose: () => void;
+  onUpdateProfile: (id: string, newName: string, newPass: string) => void;
   onResetPassword: (id: string, newPass: string) => void;
   onToggleAdmin: (id: string) => void;
   onDelete: (id: string) => void;
 }
 
-const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, onClose, onResetPassword, onToggleAdmin, onDelete }) => {
+const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose, onUpdateProfile, onResetPassword, onToggleAdmin, onDelete }) => {
+  const [newName, setNewName] = useState(user.name);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -22,10 +25,27 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, onClose, onRese
       setError('As passwords não coincidem ou estão em branco.');
       return;
     }
-    onResetPassword(user.id, newPassword);
-    alert(`Password para ${user.name} foi redefinida com sucesso.`);
+    if (isSelf) {
+      onUpdateProfile(user.id, newName, newPassword);
+      alert(`O seu perfil foi atualizado com sucesso.`);
+    } else {
+      onResetPassword(user.id, newPassword);
+      alert(`Password para ${user.name} foi redefinida com sucesso.`);
+    }
     onClose();
   };
+  
+  const handleProfileUpdate = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (newPassword && newPassword !== confirmPassword) {
+      setError('As passwords não coincidem.');
+      return;
+    }
+    onUpdateProfile(user.id, newName, newPassword);
+    alert('O seu perfil foi atualizado com sucesso.');
+    onClose();
+  }
 
   const handleToggleAdmin = () => {
     const action = user.isAdmin ? 'remover os privilégios de administrador de' : 'promover a administrador o utilizador';
@@ -42,12 +62,41 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, onClose, onRese
     }
   };
 
+  if (isSelf) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4 transition-opacity" onClick={onClose}>
+        <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg space-y-6 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+          <h3 className="text-xl font-bold text-slate-800">Editar o Meu Perfil</h3>
+          <form onSubmit={handleProfileUpdate} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="self-name">Nome de Utilizador</label>
+              <input id="self-name" type="text" value={newName} onChange={e => setNewName(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg"/>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="self-pass">Nova Password (deixar em branco para não alterar)</label>
+              <input id="self-pass" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg"/>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="self-confirm">Confirmar Nova Password</label>
+              <input id="self-confirm" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg"/>
+            </div>
+            {error && <p className="text-red-600 text-sm">{error}</p>}
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <button type="button" onClick={onClose} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-4 py-2 rounded-lg">Cancelar</button>
+              <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg">Guardar Alterações</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4 transition-opacity" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg space-y-6 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-start">
             <h3 className="text-xl font-bold text-slate-800">Gerir Utilizador: <span className="text-blue-600">{user.name}</span></h3>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600">&times;</button>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
         </div>
         
         {/* Reset Password */}
@@ -98,9 +147,10 @@ interface AdminProps {
   onDelete: (id: string) => void;
   onResetPassword: (id: string, newPass: string) => void;
   onToggleAdmin: (id: string) => void;
+  onUpdateProfile: (id: string, newName: string, newPass: string) => void;
 }
 
-const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove, onReject, onDelete, onResetPassword, onToggleAdmin }) => {
+const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove, onReject, onDelete, onResetPassword, onToggleAdmin, onUpdateProfile }) => {
   const [managingUser, setManagingUser] = useState<Collaborator | null>(null);
 
   const pendingCollaborators = collaborators.filter(c => c.status === 'pendente');
@@ -124,7 +174,10 @@ const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove,
             <ul className="divide-y divide-slate-200">
               {pendingCollaborators.map(collab => (
                 <li key={collab.id} className="flex items-center justify-between py-3 flex-wrap gap-2">
-                  <span className="font-medium text-slate-700">{collab.name}</span>
+                  <div>
+                    <span className="font-medium text-slate-700">{collab.name}</span>
+                    <span className="block text-sm text-slate-500">{collab.email}</span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <button 
                       onClick={() => onApprove(collab.id)}
@@ -160,11 +213,12 @@ const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove,
               <li key={collab.id} className="flex items-center justify-between py-3 flex-wrap gap-2">
                 <div>
                   <span className="font-medium text-slate-700">{collab.name}</span>
+                  <span className="block text-sm text-slate-500">{collab.email}</span>
                   {collab.isAdmin && <span className="ml-2 text-xs font-bold text-white bg-blue-600 px-2 py-0.5 rounded-full">Admin</span>}
                   {collab.id === currentAdminId && <span className="ml-2 text-xs font-bold text-white bg-green-600 px-2 py-0.5 rounded-full">Você</span>}
                 </div>
                 <div>
-                  {collab.id !== currentAdminId && collab.name.toLowerCase() !== 'admin' && (
+                  {collab.name.toLowerCase() !== 'admin' && (
                     <button 
                       onClick={() => setManagingUser(collab)}
                       className="flex items-center gap-1.5 text-slate-600 hover:bg-slate-200 font-semibold p-2 rounded-md transition-colors text-sm"
@@ -184,10 +238,12 @@ const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove,
       {managingUser && (
         <ManageUserModal 
           user={managingUser}
+          isSelf={managingUser.id === currentAdminId}
           onClose={() => setManagingUser(null)}
           onResetPassword={onResetPassword}
           onToggleAdmin={onToggleAdmin}
           onDelete={onDelete}
+          onUpdateProfile={onUpdateProfile}
         />
       )}
     </>
