@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Interaction, Collaborator, ReportPeriod } from '../types';
 import { ALL_NATIONALITIES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { DownloadIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon } from './icons';
+import { DownloadIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, SparklesIcon } from './icons';
+import { GoogleGenAI } from "@google/genai";
 
 interface ReportsProps {
   allInteractions: Interaction[];
@@ -25,6 +26,29 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
   const [period, setPeriod] = useState<ReportPeriod>('monthly');
   const [selectedCollaborator, setSelectedCollaborator] = useState<string>('all');
   const [nationalityFilter, setNationalityFilter] = useState<string>('');
+  const [visitReasonFilter, setVisitReasonFilter] = useState<string>('');
+  const [lengthOfStayFilter, setLengthOfStayFilter] = useState<string>('');
+  const [geminiAnalysis, setGeminiAnalysis] = useState<string>('');
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+
+  const uniqueVisitReasons = useMemo(() => {
+    const reasons = new Set<string>();
+    allInteractions.forEach(i => i.visitReason && reasons.add(i.visitReason));
+    return Array.from(reasons).sort();
+  }, [allInteractions]);
+
+  const uniqueLengthsOfStay = useMemo(() => {
+    const stays = new Set<string>();
+    allInteractions.forEach(i => i.lengthOfStay && stays.add(i.lengthOfStay));
+    return Array.from(stays).sort();
+  }, [allInteractions]);
+
+  const periodLabels: Record<ReportPeriod, string> = {
+    weekly: 'Últimos 7 dias',
+    monthly: 'Este Mês',
+    quarterly: 'Este Trimestre',
+    yearly: 'Este Ano',
+  };
 
   const filteredInteractions = useMemo(() => {
     const now = new Date();
@@ -52,9 +76,12 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
         const interactionDate = new Date(interaction.timestamp);
         const collaboratorMatch = selectedCollaborator === 'all' || interaction.collaboratorId === selectedCollaborator;
         const nationalityMatch = !nationalityFilter || interaction.nationality.toLowerCase().includes(nationalityFilter.toLowerCase());
-        return interactionDate >= startDate && interactionDate <= now && collaboratorMatch && nationalityMatch;
+        const visitReasonMatch = !visitReasonFilter || (interaction.visitReason && interaction.visitReason.toLowerCase().includes(visitReasonFilter.toLowerCase()));
+        const lengthOfStayMatch = !lengthOfStayFilter || (interaction.lengthOfStay && interaction.lengthOfStay.toLowerCase().includes(lengthOfStayFilter.toLowerCase()));
+        
+        return interactionDate >= startDate && interactionDate <= now && collaboratorMatch && nationalityMatch && visitReasonMatch && lengthOfStayMatch;
     });
-  }, [allInteractions, period, selectedCollaborator, nationalityFilter]);
+  }, [allInteractions, period, selectedCollaborator, nationalityFilter, visitReasonFilter, lengthOfStayFilter]);
 
   const nationalityData = useMemo(() => {
     const counts: { [key: string]: number } = {};
@@ -90,13 +117,6 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
 
   // Data for Trend Line Chart
   const trendData = useMemo(() => {
-    const formatters: Record<ReportPeriod, (d: Date) => string> = {
-        weekly: (d) => d.toLocaleDateString('pt-PT', { weekday: 'short', day: '2-digit' }),
-        monthly: (d) => d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }),
-        quarterly: (d) => `S${Math.floor((d.getDate() - 1) / 7) + 1}, ${d.toLocaleDateString('pt-PT', { month: 'short' })}`, // By week of month
-        yearly: (d) => d.toLocaleDateString('pt-PT', { month: 'long' }),
-    };
-
     const grouper = (date: Date) => {
         if(period === 'quarterly') {
              // Group by week
@@ -118,12 +138,11 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     
     // Sort chronologically
      return Object.entries(trendCounts)
-        .map(([dateKey, visitantes]) => ({
-            date: dateKey,
-            visitantes,
-            // Create a sortable date from the key
-            sortableDate: new Date(dateKey.split('/').reverse().join('-'))
-        }))
+        .map(([dateKey, visitantes]) => {
+             const dateParts = dateKey.split('/');
+             const sortableDate = dateParts.length === 3 ? new Date(+dateParts[2], +dateParts[1] - 1, +dateParts[0]) : new Date(); // Simple sort for non-standard keys
+             return { date: dateKey, visitantes, sortableDate };
+        })
         .sort((a, b) => a.sortableDate.getTime() - b.sortableDate.getTime())
         .map(({date, visitantes}) => ({date, visitantes})); // Remove sortableDate
   }, [filteredInteractions, period]);
@@ -180,9 +199,14 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     if (link.download !== undefined) {
         const url = URL.createObjectURL(blob);
         const collaboratorName = selectedCollaborator === 'all' ? 'todos' : collaborators.find(c => c.id === selectedCollaborator)?.name || 'desconhecido';
-        const nationalityName = nationalityFilter ? nationalityFilter.replace(/\s/g, '_') : 'todas';
+        
+        const filenameParts = [`relatorio`, period, collaboratorName];
+        if (nationalityFilter) filenameParts.push(`nac-${nationalityFilter.replace(/\s/g, '_')}`);
+        if (visitReasonFilter) filenameParts.push(`motivo-${visitReasonFilter.replace(/\s/g, '_')}`);
+        if (lengthOfStayFilter) filenameParts.push(`estadia-${lengthOfStayFilter.replace(/\s/g, '_')}`);
+        
         link.setAttribute("href", url);
-        link.setAttribute("download", `relatorio_${period}_${collaboratorName}_${nationalityName}.csv`);
+        link.setAttribute("download", `${filenameParts.join('_')}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
@@ -190,13 +214,54 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     }
   };
 
+  const handleGeminiAnalysis = async () => {
+    if (filteredInteractions.length === 0) {
+        alert("Não há dados para analisar. Por favor, ajuste os filtros.");
+        return;
+    }
+    setIsAnalyzing(true);
+    setGeminiAnalysis('');
 
-  const periodLabels: Record<ReportPeriod, string> = {
-    weekly: 'Últimos 7 dias',
-    monthly: 'Este Mês',
-    quarterly: 'Este Trimestre',
-    yearly: 'Este Ano',
+    const prompt = `
+        Analise os seguintes dados de interação de um posto de turismo e forneça um resumo com as principais conclusões.
+        Os dados referem-se ao período: ${periodLabels[period]}.
+        Os dados estão filtrados para o colaborador: ${selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name}.
+        Se outros filtros estiverem ativos, considere-os também: Nacionalidade (${nationalityFilter || 'Todas'}), Motivo da Visita (${visitReasonFilter || 'Todos'}), Duração da Estadia (${lengthOfStayFilter || 'Todas'}).
+
+        Indicadores Chave de Desempenho (KPIs):
+        - Visitantes Totais: ${kpis.totalVisitors}
+        - Atendimentos Totais: ${kpis.totalInteractions}
+        - Média por Grupo: ${kpis.averageGroupSize}
+        - Principal Nacionalidade: ${kpis.topNationality}
+
+        Top 5 Nacionalidades por Nº de Visitantes:
+        ${nationalityData.slice(0, 5).map(d => `- ${d.name}: ${d.visitantes} visitantes`).join('\n')}
+
+        Principais Motivos de Visita:
+        ${visitReasonData.length > 0 ? visitReasonData.slice(0, 5).map(d => `- ${d.name}: ${d.visitantes} visitantes`).join('\n') : 'Sem dados'}
+        
+        Principais Durações de Estadia:
+        ${lengthOfStayData.length > 0 ? lengthOfStayData.slice(0, 5).map(d => `- ${d.name}: ${d.visitantes} visitantes`).join('\n') : 'Sem dados'}
+
+        Forneça a análise em Português, formatada como Markdown. Foque-se em tendências, padrões significativos e potenciais recomendações para a equipa do posto de turismo.
+        Seja conciso e direto ao ponto.
+    `;
+    
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+        setGeminiAnalysis(response.text);
+    } catch (error) {
+        console.error("Error calling Gemini API", error);
+        setGeminiAnalysis("Ocorreu um erro ao gerar a análise. Por favor, tente novamente.");
+    } finally {
+        setIsAnalyzing(false);
+    }
   };
+
   const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280'];
 
   return (
@@ -204,6 +269,13 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
       <datalist id="nationalities-filter">
             {ALL_NATIONALITIES.map(nat => <option key={nat} value={nat} />)}
       </datalist>
+      <datalist id="visit-reasons-filter">
+            {uniqueVisitReasons.map(reason => <option key={reason} value={reason} />)}
+      </datalist>
+      <datalist id="length-of-stay-filter">
+            {uniqueLengthsOfStay.map(stay => <option key={stay} value={stay} />)}
+      </datalist>
+
         {/* Header and Filters */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-3xl font-bold text-slate-800">Relatórios</h2>
@@ -240,9 +312,35 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                         className="pl-9 pr-3 py-2 w-48 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500"
                     />
                 </div>
+                 <div className="relative">
+                    <SearchIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"/>
+                    <input 
+                        type="text"
+                        list="visit-reasons-filter"
+                        placeholder="Filtrar motivo..."
+                        value={visitReasonFilter}
+                        onChange={(e) => setVisitReasonFilter(e.target.value)}
+                        className="pl-9 pr-3 py-2 w-48 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                </div>
+                <div className="relative">
+                    <SearchIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"/>
+                    <input 
+                        type="text"
+                        list="length-of-stay-filter"
+                        placeholder="Filtrar estadia..."
+                        value={lengthOfStayFilter}
+                        onChange={(e) => setLengthOfStayFilter(e.target.value)}
+                        className="pl-9 pr-3 py-2 w-48 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                </div>
                 <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors">
                     <DownloadIcon className="w-5 h-5" />
-                    <span>Exportar</span>
+                    <span className="hidden sm:inline">Exportar</span>
+                </button>
+                 <button onClick={handleGeminiAnalysis} disabled={isAnalyzing} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-blue-600 text-white border border-blue-700 shadow-sm hover:bg-blue-700 transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed">
+                    <SparklesIcon className="w-5 h-5" />
+                    <span className="hidden sm:inline">{isAnalyzing ? 'A analisar...' : 'Análise IA'}</span>
                 </button>
             </div>
         </div>
@@ -352,6 +450,31 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                     </div>
                 </div>
             </div>
+            
+            {/* Gemini Analysis */}
+            {(isAnalyzing || geminiAnalysis) && (
+              <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                <h3 className="text-lg font-semibold text-slate-700 mb-4 flex items-center">
+                  <SparklesIcon className="w-5 h-5 mr-2 text-blue-600" />
+                  Análise Inteligente
+                </h3>
+                {isAnalyzing ? (
+                  <div className="flex items-center justify-center py-10">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <p className="ml-3 text-slate-600">A gerar análise com Gemini...</p>
+                  </div>
+                ) : (
+                  <div
+                    className="text-slate-700 whitespace-pre-wrap bg-slate-50 p-4 rounded-lg overflow-x-auto prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{
+                      __html: geminiAnalysis
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\n/g, '<br />'),
+                    }}
+                  />
+                )}
+              </div>
+            )}
 
         </div>
         ) : (
