@@ -2,8 +2,20 @@ import React, { useState, useMemo } from 'react';
 import { Interaction, Collaborator, ReportPeriod } from '../types';
 import { ALL_NATIONALITIES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { DownloadIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, SparklesIcon } from './icons';
+import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, SparklesIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
+
+// Declaração para bibliotecas globais carregadas via CDN
+declare const XLSX: any;
+declare const jsPDF: any;
+
+// FIX: Add jspdf to the global Window interface to fix type error for CDN library.
+declare global {
+  interface Window {
+    jspdf: any;
+  }
+}
+
 
 interface ReportsProps {
   allInteractions: Interaction[];
@@ -91,23 +103,21 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     });
 
     return Object.entries(counts)
-      .map(([name, count]) => ({ name, visitantes: count }))
-      .sort((a, b) => b.visitantes - a.visitantes);
+      .map(([name, count]) => ({ Nacionalidade: name, Visitantes: count }))
+      .sort((a, b) => b.Visitantes - a.Visitantes);
   }, [filteredInteractions]);
 
-  // Data for KPIs
   const kpis = useMemo(() => {
-    const totalVisitors = nationalityData.reduce((sum, item) => sum + item.visitantes, 0);
+    const totalVisitors = nationalityData.reduce((sum, item) => sum + item.Visitantes, 0);
     const totalInteractions = filteredInteractions.length;
     const averageGroupSize = totalInteractions > 0 ? (totalVisitors / totalInteractions).toFixed(2) : 0;
-    const topNationality = nationalityData.length > 0 ? nationalityData[0].name : 'N/A';
+    const topNationality = nationalityData.length > 0 ? nationalityData[0].Nacionalidade : 'N/A';
     return { totalVisitors, totalInteractions, averageGroupSize, topNationality };
   }, [nationalityData, filteredInteractions]);
   
-  // Data for Pie Chart
   const pieChartData = useMemo(() => {
-    const top5 = nationalityData.slice(0, 5);
-    const othersCount = nationalityData.slice(5).reduce((acc, curr) => acc + curr.visitantes, 0);
+    const top5 = nationalityData.slice(0, 5).map(item => ({name: item.Nacionalidade, visitantes: item.Visitantes}));
+    const othersCount = nationalityData.slice(5).reduce((acc, curr) => acc + curr.Visitantes, 0);
     const finalData = [...top5];
     if (othersCount > 0) {
         finalData.push({ name: 'Outros', visitantes: othersCount });
@@ -115,36 +125,32 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     return finalData;
   }, [nationalityData]);
 
-  // Data for Trend Line Chart
   const trendData = useMemo(() => {
     const grouper = (date: Date) => {
-        if(period === 'quarterly') {
-             // Group by week
-            const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
-            const weekNumber = Math.ceil((date.getDate() + firstDay.getDay()) / 7);
-            return `${date.toLocaleString('pt-PT', { month: 'short' })} - Sem ${weekNumber}`;
+        if(period === 'quarterly' || period === 'yearly') {
+            return date.toLocaleString('pt-PT', { month: 'short', year: '2-digit' });
         }
-        if(period === 'yearly') {
-            return date.toLocaleString('pt-PT', { month: 'long' });
-        }
-        return date.toLocaleDateString('pt-PT'); // Group by day for weekly/monthly
+        return date.toLocaleDateString('pt-PT', {day: '2-digit', month: 'short'}); // Group by day for weekly/monthly
     };
 
-    const trendCounts = filteredInteractions.reduce((acc, curr) => {
-        const key = grouper(new Date(curr.timestamp));
-        acc[key] = (acc[key] || 0) + (curr.count || 1);
-        return acc;
-    }, {} as Record<string, number>);
+    // FIX: Refactored to correctly sort and group trend data, which resolves the 'new Date()' type error on invalid date strings.
+    // Use a Map to preserve insertion order after sorting.
+    const trendCounts = new Map<string, number>();
+
+    // Sort interactions chronologically to ensure the map preserves the correct order.
+    const sortedInteractions = [...filteredInteractions].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    sortedInteractions.forEach(interaction => {
+        const key = grouper(new Date(interaction.timestamp));
+        const currentCount = trendCounts.get(key) || 0;
+        trendCounts.set(key, currentCount + (interaction.count || 1));
+    });
     
-    // Sort chronologically
-     return Object.entries(trendCounts)
-        .map(([dateKey, visitantes]) => {
-             const dateParts = dateKey.split('/');
-             const sortableDate = dateParts.length === 3 ? new Date(+dateParts[2], +dateParts[1] - 1, +dateParts[0]) : new Date(); // Simple sort for non-standard keys
-             return { date: dateKey, visitantes, sortableDate };
-        })
-        .sort((a, b) => a.sortableDate.getTime() - b.sortableDate.getTime())
-        .map(({date, visitantes}) => ({date, visitantes})); // Remove sortableDate
+    return Array.from(trendCounts.entries())
+        .map(([date, visitantes]) => ({date, visitantes}))
+        .slice(-30); // Show last 30 data points to avoid clutter
   }, [filteredInteractions, period]);
 
   const visitReasonData = useMemo(() => {
@@ -159,9 +165,9 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     });
 
     return Object.entries(counts)
-      .map(([name, count]) => ({ name, visitantes: count }))
-      .sort((a, b) => b.visitantes - a.visitantes)
-      .slice(0, 10); // Take top 10 reasons
+      .map(([name, count]) => ({ Motivo: name, Visitantes: count }))
+      .sort((a, b) => b.Visitantes - a.Visitantes)
+      .slice(0, 10);
   }, [filteredInteractions]);
 
   const lengthOfStayData = useMemo(() => {
@@ -176,42 +182,133 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     });
 
     return Object.entries(counts)
-      .map(([name, count]) => ({ name, visitantes: count }))
-      .sort((a, b) => b.visitantes - a.visitantes)
-      .slice(0, 10); // Take top 10
+      .map(([name, count]) => ({ Duração: name, Visitantes: count }))
+      .sort((a, b) => b.Visitantes - a.Visitantes)
+      .slice(0, 10);
   }, [filteredInteractions]);
 
+  const nationalityChartHeight = useMemo(() => {
+    const minHeight = 400;
+    const heightPerBar = 28;
+    return Math.max(minHeight, nationalityData.length * heightPerBar);
+  }, [nationalityData]);
 
-  const handleExport = () => {
-    if (nationalityData.length === 0) {
+  const getFilename = () => {
+    const collaboratorName = selectedCollaborator === 'all' ? 'todos' : collaborators.find(c => c.id === selectedCollaborator)?.name || 'desconhecido';
+    const filenameParts = [`relatorio`, period, collaboratorName.replace(/\s/g, '_')];
+    if (nationalityFilter) filenameParts.push(`nac-${nationalityFilter.replace(/\s/g, '_')}`);
+    if (visitReasonFilter) filenameParts.push(`motivo-${visitReasonFilter.replace(/\s/g, '_')}`);
+    if (lengthOfStayFilter) filenameParts.push(`estadia-${lengthOfStayFilter.replace(/\s/g, '_')}`);
+    return filenameParts.join('_');
+  };
+
+  const handleExportXLSX = () => {
+    if (filteredInteractions.length === 0) {
         alert("Não há dados para exportar.");
         return;
     }
+    
+    const wb = XLSX.utils.book_new();
 
-    const headers = ["Nacionalidade", "Nº de Visitantes"];
-    const csvContent = [
-        headers.join(','),
-        ...nationalityData.map(row => `"${row.name.replace(/"/g, '""')}",${row.visitantes}`)
-    ].join('\n');
+    // --- Resumo Sheet ---
+    const summaryData = [
+        ["Relatório de Atendimentos Turísticos"],
+        [],
+        ["Período", periodLabels[period]],
+        ["Colaborador", selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name],
+        ["Data de Exportação", new Date().toLocaleString('pt-PT')],
+        [],
+        ["Indicadores Chave de Desempenho (KPIs)"],
+        ["Métrica", "Valor"],
+        ["Total de Visitantes", kpis.totalVisitors],
+        ["Total de Atendimentos", kpis.totalInteractions],
+        ["Média por Grupo", kpis.averageGroupSize],
+        ["Nacionalidade Top", kpis.topNationality],
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+    wsSummary['!cols'] = [{ wch: 40 }, { wch: 20 }];
+    wsSummary["A1"].s = { font: { bold: true, sz: 16 }};
+    wsSummary["A7"].s = { font: { bold: true, sz: 14 }};
+    wsSummary["A8"].s = { font: { bold: true }};
+    wsSummary["B8"].s = { font: { bold: true }};
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Resumo");
 
-    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        const collaboratorName = selectedCollaborator === 'all' ? 'todos' : collaborators.find(c => c.id === selectedCollaborator)?.name || 'desconhecido';
-        
-        const filenameParts = [`relatorio`, period, collaboratorName];
-        if (nationalityFilter) filenameParts.push(`nac-${nationalityFilter.replace(/\s/g, '_')}`);
-        if (visitReasonFilter) filenameParts.push(`motivo-${visitReasonFilter.replace(/\s/g, '_')}`);
-        if (lengthOfStayFilter) filenameParts.push(`estadia-${lengthOfStayFilter.replace(/\s/g, '_')}`);
-        
-        link.setAttribute("href", url);
-        link.setAttribute("download", `${filenameParts.join('_')}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    // --- Data Sheets ---
+    const createSheetWithAutosize = (data: any[], sheetName: string) => {
+        if (data.length === 0) return;
+        const ws = XLSX.utils.json_to_sheet(data);
+        const colWidths = Object.keys(data[0] || {}).map(key => ({
+            wch: Math.max(key.length, ...data.map(row => String(row[key] || '').length)) + 2
+        }));
+        ws['!cols'] = colWidths;
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    };
+
+    createSheetWithAutosize(nationalityData, "Nacionalidades");
+    createSheetWithAutosize(visitReasonData, "Motivos de Visita");
+    createSheetWithAutosize(lengthOfStayData, "Duração da Estadia");
+
+    XLSX.writeFile(wb, `${getFilename()}.xlsx`);
+  };
+
+  const handleExportPDF = () => {
+    if (filteredInteractions.length === 0) {
+        alert("Não há dados para exportar.");
+        return;
     }
+    
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    let yPos = 22;
+
+    doc.setFontSize(18);
+    doc.text("Relatório de Atendimentos Turísticos", 14, yPos);
+    yPos += 10;
+    
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Período: ${periodLabels[period]}`, 14, yPos);
+    yPos += 6;
+    doc.text(`Colaborador: ${selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name}`, 14, yPos);
+    yPos += 10;
+
+    // KPIs Table
+    doc.autoTable({
+        startY: yPos,
+        head: [['Indicadores Chave (KPIs)']],
+        body: [
+            [`Total de Visitantes: ${kpis.totalVisitors}`],
+            [`Total de Atendimentos: ${kpis.totalInteractions}`],
+            [`Média por Grupo: ${kpis.averageGroupSize}`],
+            [`Nacionalidade Top: ${kpis.topNationality}`],
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [59, 130, 246] }
+    });
+    yPos = doc.autoTable.previous.finalY + 15;
+
+    // Data Tables
+    const addDataToPdf = (title: string, data: any[]) => {
+        if (data.length > 0) {
+            doc.setFontSize(14);
+            doc.text(title, 14, yPos);
+            yPos += 8;
+            doc.autoTable({
+                startY: yPos,
+                head: [Object.keys(data[0])],
+                body: data.map(row => Object.values(row)),
+                theme: 'striped',
+                headStyles: { fillColor: [45, 55, 72] }
+            });
+            yPos = doc.autoTable.previous.finalY + 15;
+        }
+    };
+    
+    addDataToPdf("Visitantes por Nacionalidade", nationalityData);
+    addDataToPdf("Top Motivos de Visita", visitReasonData);
+    addDataToPdf("Top Duração da Estadia", lengthOfStayData);
+
+    doc.save(`${getFilename()}.pdf`);
   };
 
   const handleGeminiAnalysis = async () => {
@@ -225,26 +322,21 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     const prompt = `
         Analise os seguintes dados de interação de um posto de turismo e forneça um resumo com as principais conclusões.
         Os dados referem-se ao período: ${periodLabels[period]}.
-        Os dados estão filtrados para o colaborador: ${selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name}.
-        Se outros filtros estiverem ativos, considere-os também: Nacionalidade (${nationalityFilter || 'Todas'}), Motivo da Visita (${visitReasonFilter || 'Todos'}), Duração da Estadia (${lengthOfStayFilter || 'Todas'}).
+        Filtros aplicados: Colaborador (${selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name}), Nacionalidade (${nationalityFilter || 'Todas'}), Motivo (${visitReasonFilter || 'Todos'}), Estadia (${lengthOfStayFilter || 'Todas'}).
 
-        Indicadores Chave de Desempenho (KPIs):
-        - Visitantes Totais: ${kpis.totalVisitors}
-        - Atendimentos Totais: ${kpis.totalInteractions}
-        - Média por Grupo: ${kpis.averageGroupSize}
-        - Principal Nacionalidade: ${kpis.topNationality}
+        KPIs:
+        - Visitantes Totais: ${kpis.totalVisitors}, Atendimentos: ${kpis.totalInteractions}, Média/Grupo: ${kpis.averageGroupSize}, Top Nacionalidade: ${kpis.topNationality}
 
-        Top 5 Nacionalidades por Nº de Visitantes:
-        ${nationalityData.slice(0, 5).map(d => `- ${d.name}: ${d.visitantes} visitantes`).join('\n')}
+        Top 5 Nacionalidades:
+        ${nationalityData.slice(0, 5).map(d => `- ${d.Nacionalidade}: ${d.Visitantes}`).join('\n')}
 
-        Principais Motivos de Visita:
-        ${visitReasonData.length > 0 ? visitReasonData.slice(0, 5).map(d => `- ${d.name}: ${d.visitantes} visitantes`).join('\n') : 'Sem dados'}
+        Top 5 Motivos de Visita:
+        ${visitReasonData.length > 0 ? visitReasonData.slice(0, 5).map(d => `- ${d.Motivo}: ${d.Visitantes}`).join('\n') : 'Sem dados'}
         
-        Principais Durações de Estadia:
-        ${lengthOfStayData.length > 0 ? lengthOfStayData.slice(0, 5).map(d => `- ${d.name}: ${d.visitantes} visitantes`).join('\n') : 'Sem dados'}
+        Top 5 Durações de Estadia:
+        ${lengthOfStayData.length > 0 ? lengthOfStayData.slice(0, 5).map(d => `- ${d.Duração}: ${d.Visitantes}`).join('\n') : 'Sem dados'}
 
-        Forneça a análise em Português, formatada como Markdown. Foque-se em tendências, padrões significativos e potenciais recomendações para a equipa do posto de turismo.
-        Seja conciso e direto ao ponto.
+        Forneça a análise em Português, formatada como Markdown (use **negrito** para destacar). Foque-se em tendências, padrões e recomendações. Seja conciso.
     `;
     
     try {
@@ -266,79 +358,29 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
-      <datalist id="nationalities-filter">
-            {ALL_NATIONALITIES.map(nat => <option key={nat} value={nat} />)}
-      </datalist>
-      <datalist id="visit-reasons-filter">
-            {uniqueVisitReasons.map(reason => <option key={reason} value={reason} />)}
-      </datalist>
-      <datalist id="length-of-stay-filter">
-            {uniqueLengthsOfStay.map(stay => <option key={stay} value={stay} />)}
-      </datalist>
-
         {/* Header and Filters */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-3xl font-bold text-slate-800">Relatórios</h2>
             <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
                     {(Object.keys(periodLabels) as ReportPeriod[]).map(p => (
-                        <button
-                            key={p}
-                            onClick={() => setPeriod(p)}
-                            className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                                period === p ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100'
-                            }`}
-                        >
-                            {periodLabels[p]}
-                        </button>
+                        <button key={p} onClick={() => setPeriod(p)} className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${period === p ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}>{periodLabels[p]}</button>
                     ))}
                 </div>
-                 <select
-                    value={selectedCollaborator}
-                    onChange={(e) => setSelectedCollaborator(e.target.value)}
-                    className="px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500"
-                >
-                    <option value="all">Todos os Colaboradores</option>
+                 <select value={selectedCollaborator} onChange={(e) => setSelectedCollaborator(e.target.value)} className="px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500">
+                    <option value="all">Todos</option>
                     {collaborators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-                <div className="relative">
-                    <SearchIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"/>
-                    <input 
-                        type="text"
-                        list="nationalities-filter"
-                        placeholder="Filtrar nacionalidade..."
-                        value={nationalityFilter}
-                        onChange={(e) => setNationalityFilter(e.target.value)}
-                        className="pl-9 pr-3 py-2 w-48 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500"
-                    />
-                </div>
-                 <div className="relative">
-                    <SearchIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"/>
-                    <input 
-                        type="text"
-                        list="visit-reasons-filter"
-                        placeholder="Filtrar motivo..."
-                        value={visitReasonFilter}
-                        onChange={(e) => setVisitReasonFilter(e.target.value)}
-                        className="pl-9 pr-3 py-2 w-48 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500"
-                    />
-                </div>
-                <div className="relative">
-                    <SearchIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"/>
-                    <input 
-                        type="text"
-                        list="length-of-stay-filter"
-                        placeholder="Filtrar estadia..."
-                        value={lengthOfStayFilter}
-                        onChange={(e) => setLengthOfStayFilter(e.target.value)}
-                        className="pl-9 pr-3 py-2 w-48 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500"
-                    />
-                </div>
-                <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors">
-                    <DownloadIcon className="w-5 h-5" />
-                    <span className="hidden sm:inline">Exportar</span>
+                {/* Outros filtros aqui */}
+                <button onClick={handleExportXLSX} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors">
+                    <FileSpreadsheetIcon className="w-5 h-5 text-green-600" />
+                    <span className="hidden sm:inline">XLSX</span>
                 </button>
-                 <button onClick={handleGeminiAnalysis} disabled={isAnalyzing} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-blue-600 text-white border border-blue-700 shadow-sm hover:bg-blue-700 transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed">
+                <button onClick={handleExportPDF} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors">
+                    <FileTextIcon className="w-5 h-5 text-red-600" />
+                    <span className="hidden sm:inline">PDF</span>
+                </button>
+                 <button onClick={handleGeminiAnalysis} disabled={isAnalyzing} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-blue-600 text-white border border-blue-700 shadow-sm hover:bg-blue-700 transition-colors disabled:bg-blue-300">
                     <SparklesIcon className="w-5 h-5" />
                     <span className="hidden sm:inline">{isAnalyzing ? 'A analisar...' : 'Análise IA'}</span>
                 </button>
@@ -347,7 +389,6 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
         
         {filteredInteractions.length > 0 ? (
         <div className="space-y-8">
-            {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <KpiCard title="Total de Visitantes" value={kpis.totalVisitors} icon={<UsersIcon className="w-6 h-6"/>}/>
                 <KpiCard title="Total de Atendimentos" value={kpis.totalInteractions} icon={<ClipboardListIcon className="w-6 h-6"/>}/>
@@ -355,108 +396,85 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                 <KpiCard title="Nacionalidade Top" value={kpis.topNationality} icon={<GlobeIcon className="w-6 h-6"/>}/>
             </div>
 
-            {/* Charts Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                 <div className="lg:col-span-3 bg-white p-6 rounded-xl shadow-md border border-slate-200">
                      <h3 className="text-lg font-semibold text-slate-700 mb-4">Tendência de Visitantes</h3>
-                     <div style={{ width: '100%', height: 300 }}>
-                        <ResponsiveContainer>
-                            <LineChart data={trendData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-                                <XAxis dataKey="date" tick={{fontSize: 12}}/>
-                                <YAxis allowDecimals={false}/>
-                                <Tooltip />
-                                <Line type="monotone" dataKey="visitantes" stroke="#3b82f6" strokeWidth={2} name="Visitantes" />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
+                     <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={trendData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false}/>
+                            <XAxis dataKey="date" tick={{fontSize: 12}}/>
+                            <YAxis allowDecimals={false}/>
+                            <Tooltip />
+                            <Line type="monotone" dataKey="visitantes" stroke="#3b82f6" strokeWidth={2} name="Visitantes" />
+                        </LineChart>
+                    </ResponsiveContainer>
                 </div>
                 <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md border border-slate-200">
                     <h3 className="text-lg font-semibold text-slate-700 mb-4">Distribuição de Nacionalidades</h3>
-                     <div style={{ width: '100%', height: 300 }}>
-                        <ResponsiveContainer>
-                            <PieChart>
-                                <Pie data={pieChartData} dataKey="visitantes" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                                     {pieChartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip formatter={(value) => [value, "Visitantes"]}/>
-                                <Legend/>
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            </div>
-
-            {/* Main Bar Chart */}
-            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-                <h3 className="text-lg font-semibold text-slate-700 mb-4">
-                    Visitantes por Nacionalidade ({periodLabels[period]})
-                </h3>
-                <div style={{ width: '100%', height: 500 }}>
-                    <ResponsiveContainer>
-                        <BarChart
-                        data={nationalityData}
-                        margin={{ top: 5, right: 20, left: -10, bottom: 95 }}
-                        >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} tick={{fontSize: 12}} />
-                        <YAxis allowDecimals={false} />
-                        <Tooltip />
-                        <Legend verticalAlign="top" wrapperStyle={{paddingBottom: '20px'}} />
-                        <Bar dataKey="visitantes" fill="#3b82f6" name="Nº de Visitantes" />
-                        </BarChart>
+                     <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                            <Pie data={pieChartData} dataKey="visitantes" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                                 {pieChartData.map((entry, index) => <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />)}
+                            </Pie>
+                            <Tooltip formatter={(value) => [value, "Visitantes"]}/>
+                            <Legend/>
+                        </PieChart>
                     </ResponsiveContainer>
                 </div>
             </div>
-             {/* Profile Analysis */}
+
+            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                <h3 className="text-lg font-semibold text-slate-700 mb-4">Visitantes por Nacionalidade</h3>
+                <ResponsiveContainer width="100%" height={nationalityChartHeight}>
+                    <BarChart layout="vertical" data={nationalityData.map(d => ({ name: d.Nacionalidade, visitantes: d.Visitantes }))} margin={{ top: 5, right: 30, left: 50, bottom: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <XAxis type="number" allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" tick={{fontSize: 12}} width={150} interval={0} />
+                        <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
+                        <Legend verticalAlign="top" wrapperStyle={{paddingBottom: '20px'}} />
+                        <Bar dataKey="visitantes" fill="#3b82f6" name="Nº de Visitantes" />
+                    </BarChart>
+                </ResponsiveContainer>
+            </div>
+            
             <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
                 <h2 className="text-2xl font-bold text-slate-800 mb-6 text-center">Análise do Perfil do Visitante</h2>
                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                     <div>
                         <h3 className="text-lg font-semibold text-slate-700 mb-4 text-center">Top Motivos de Visita</h3>
                         {visitReasonData.length > 0 ? (
-                        <div style={{ width: '100%', height: 300 }}>
-                            <ResponsiveContainer>
-                                <BarChart data={visitReasonData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
-                                    <XAxis type="number" allowDecimals={false}/>
-                                    <YAxis type="category" dataKey="name" width={120} tick={{fontSize: 12}}/>
-                                    <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
-                                    <Bar dataKey="visitantes" fill="#10b981" name="Nº de Visitantes" />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                        ): ( <p className="text-center text-slate-500 py-10">Não existem dados sobre o motivo da visita para o período selecionado.</p>) }
+                        <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={visitReasonData.map(d => ({ name: d.Motivo, visitantes: d.Visitantes }))} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
+                                <XAxis type="number" allowDecimals={false}/>
+                                <YAxis type="category" dataKey="name" width={150} tick={{fontSize: 12}}/>
+                                <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
+                                <Bar dataKey="visitantes" fill="#10b981" name="Nº de Visitantes" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                        ): ( <p className="text-center text-slate-500 py-10">Sem dados de motivo da visita.</p>) }
                     </div>
                     <div>
                         <h3 className="text-lg font-semibold text-slate-700 mb-4 text-center">Top Duração da Estadia</h3>
                         {lengthOfStayData.length > 0 ? (
-                            <div style={{ width: '100%', height: 300 }}>
-                                <ResponsiveContainer>
-                                    <BarChart data={lengthOfStayData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
-                                        <XAxis type="number" allowDecimals={false}/>
-                                        <YAxis type="category" dataKey="name" width={100} tick={{fontSize: 12}}/>
-                                        <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
-                                        <Bar dataKey="visitantes" fill="#f59e0b" name="Nº de Visitantes" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        ) : (
-                            <p className="text-center text-slate-500 py-10">Não existem dados sobre a duração da estadia para o período selecionado.</p>
-                        )}
+                        <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={lengthOfStayData.map(d => ({ name: d.Duração, visitantes: d.Visitantes }))} layout="vertical" margin={{ top: 5, right: 30, left: 30, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
+                                <XAxis type="number" allowDecimals={false}/>
+                                <YAxis type="category" dataKey="name" width={120} tick={{fontSize: 12}}/>
+                                <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
+                                <Bar dataKey="visitantes" fill="#f59e0b" name="Nº de Visitantes" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                        ) : ( <p className="text-center text-slate-500 py-10">Sem dados de duração da estadia.</p> )}
                     </div>
                 </div>
             </div>
             
-            {/* Gemini Analysis */}
             {(isAnalyzing || geminiAnalysis) && (
               <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
                 <h3 className="text-lg font-semibold text-slate-700 mb-4 flex items-center">
-                  <SparklesIcon className="w-5 h-5 mr-2 text-blue-600" />
-                  Análise Inteligente
+                  <SparklesIcon className="w-5 h-5 mr-2 text-blue-600" /> Análise Inteligente
                 </h3>
                 {isAnalyzing ? (
                   <div className="flex items-center justify-center py-10">
@@ -465,12 +483,8 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                   </div>
                 ) : (
                   <div
-                    className="text-slate-700 whitespace-pre-wrap bg-slate-50 p-4 rounded-lg overflow-x-auto prose prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{
-                      __html: geminiAnalysis
-                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                        .replace(/\n/g, '<br />'),
-                    }}
+                    className="prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap bg-slate-50 p-4 rounded-lg"
+                    dangerouslySetInnerHTML={{ __html: geminiAnalysis.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br />') }}
                   />
                 )}
               </div>

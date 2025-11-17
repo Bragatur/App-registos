@@ -205,10 +205,10 @@ const App: React.FC = () => {
     );
   };
 
-  const addInteraction = (nationality: string, count: number, visitReason?: string, lengthOfStay?: string) => {
-    if (!currentCollaborator) return;
+  const addInteraction = (nationality: string, count: number, visitReason?: string, lengthOfStay?: string): string => {
+    if (!currentCollaborator) return '';
     const newInteraction: Interaction = {
-      id: `int_${Date.now()}`,
+      id: `int_${Date.now()}_${Math.random().toString(36).slice(2)}`,
       collaboratorId: currentCollaborator.id,
       nationality,
       count,
@@ -217,6 +217,7 @@ const App: React.FC = () => {
       lengthOfStay: lengthOfStay && lengthOfStay.trim() ? lengthOfStay.trim() : undefined,
     };
     setInteractions(prev => [newInteraction, ...prev]);
+    return newInteraction.id;
   };
   
   const updateInteraction = (updatedInteraction: Interaction) => {

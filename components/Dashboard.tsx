@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Collaborator, Interaction } from '../types';
 import { QUICK_ACCESS_NATIONALITIES, ALL_NATIONALITIES } from '../constants';
-import { PlusIcon, EditIcon, TrashIcon, SearchIcon, BookOpenIcon, ClockIcon } from './icons';
+import { PlusIcon, EditIcon, SearchIcon, BookOpenIcon, ClockIcon, ArrowUpIcon, ArrowDownIcon } from './icons';
 
 interface DashboardProps {
   collaborator: Collaborator;
   interactions: Interaction[];
-  addInteraction: (nationality: string, count: number, visitReason?: string, lengthOfStay?: string) => void;
+  addInteraction: (nationality: string, count: number, visitReason?: string, lengthOfStay?: string) => string;
   updateInteraction: (interaction: Interaction) => void;
   deleteInteraction: (id: string) => void;
 }
@@ -14,8 +14,7 @@ interface DashboardProps {
 const InteractionRow: React.FC<{
     interaction: Interaction;
     onUpdate: (interaction: Interaction) => void;
-    onDelete: (id: string) => void;
-}> = ({ interaction, onUpdate, onDelete }) => {
+}> = ({ interaction, onUpdate }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [nationality, setNationality] = useState(interaction.nationality);
     const [count, setCount] = useState(interaction.count || 1);
@@ -67,16 +66,10 @@ const InteractionRow: React.FC<{
         }
     }
     
-    const handleDelete = () => {
-        if (window.confirm('Tem a certeza que deseja eliminar este registo? Esta ação não pode ser desfeita.')) {
-            onDelete(interaction.id);
-        }
-    };
-
     if (isEditing) {
         return (
             <tr className="border-b border-slate-200 bg-blue-50">
-                <td className="py-3 px-4 align-top" colSpan={2}>
+                <td className="py-3 px-4 align-top" colSpan={3}>
                     <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2">
                             <input
@@ -127,18 +120,16 @@ const InteractionRow: React.FC<{
 
     return (
          <tr className="border-b border-slate-200 hover:bg-slate-50">
+            <td className="py-3 px-4 align-top font-bold text-slate-800 text-lg">{interaction.count || 1}x</td>
             <td className="py-3 px-4 align-top">
-                <div className="flex items-start">
-                    <span className="font-bold text-slate-800 text-lg mr-3 w-8 text-right">{interaction.count || 1}x</span>
-                    <div>
-                        <span className="font-medium text-slate-800">{interaction.nationality}</span>
-                        {(interaction.visitReason || interaction.lengthOfStay) && (
-                            <div className="text-xs text-slate-500 mt-1 space-y-1 max-w-xs">
-                                {interaction.visitReason && <p className="flex items-start"><BookOpenIcon className="w-3 h-3 mr-1.5 shrink-0 mt-0.5"/> <span>{interaction.visitReason}</span></p>}
-                                {interaction.lengthOfStay && <p className="flex items-start"><ClockIcon className="w-3 h-3 mr-1.5 shrink-0 mt-0.5"/> <span>{interaction.lengthOfStay}</span></p>}
-                            </div>
-                        )}
-                    </div>
+                <div>
+                    <span className="font-medium text-slate-800">{interaction.nationality}</span>
+                    {(interaction.visitReason || interaction.lengthOfStay) && (
+                        <div className="text-xs text-slate-500 mt-1 space-y-1 max-w-xs">
+                            {interaction.visitReason && <p className="flex items-start"><BookOpenIcon className="w-3 h-3 mr-1.5 shrink-0 mt-0.5"/> <span>{interaction.visitReason}</span></p>}
+                            {interaction.lengthOfStay && <p className="flex items-start"><ClockIcon className="w-3 h-3 mr-1.5 shrink-0 mt-0.5"/> <span>{interaction.lengthOfStay}</span></p>}
+                        </div>
+                    )}
                 </div>
             </td>
             <td className="py-3 px-4 text-slate-500 text-sm align-top">
@@ -149,9 +140,6 @@ const InteractionRow: React.FC<{
                     <button onClick={() => setIsEditing(true)} className="text-slate-500 hover:text-blue-600 p-2 rounded-full hover:bg-blue-100 transition-colors" aria-label="Editar">
                         <EditIcon className="w-5 h-5" />
                     </button>
-                    <button onClick={handleDelete} className="text-slate-500 hover:text-red-600 p-2 rounded-full hover:bg-red-100 transition-colors" aria-label="Eliminar">
-                        <TrashIcon className="w-5 h-5" />
-                    </button>
                 </div>
             </td>
         </tr>
@@ -161,6 +149,8 @@ const InteractionRow: React.FC<{
 
 const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addInteraction, updateInteraction, deleteInteraction }) => {
   const [notification, setNotification] = useState('');
+  const [lastAddedInteractionId, setLastAddedInteractionId] = useState<string | null>(null);
+  const notificationTimeoutRef = useRef<number | null>(null);
   
   // Form state
   const [nationality, setNationality] = useState('');
@@ -169,10 +159,81 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
   const [lengthOfStay, setLengthOfStay] = useState('');
 
   const countInputRef = useRef<HTMLInputElement>(null);
+  
+  // Table state
+  const [searchTerm, setSearchTerm] = useState('');
+  type SortKey = 'count' | 'nationality' | 'timestamp';
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({ key: 'timestamp', direction: 'desc' });
+  
+  const processedInteractions = useMemo(() => {
+    let sortableItems = [...interactions];
 
-  const showNotification = (message: string) => {
+    // Filtering
+    if (searchTerm.trim()) {
+        const lowercasedFilter = searchTerm.toLowerCase();
+        sortableItems = sortableItems.filter(item => 
+            item.nationality.toLowerCase().includes(lowercasedFilter) ||
+            item.visitReason?.toLowerCase().includes(lowercasedFilter) ||
+            item.lengthOfStay?.toLowerCase().includes(lowercasedFilter)
+        );
+    }
+
+    // Sorting
+    sortableItems.sort((a, b) => {
+        if (sortConfig.key === 'timestamp') {
+            const dateA = new Date(a.timestamp).getTime();
+            const dateB = new Date(b.timestamp).getTime();
+            return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+        }
+        if (sortConfig.key === 'nationality') {
+            return sortConfig.direction === 'asc' 
+                ? a.nationality.localeCompare(b.nationality) 
+                : b.nationality.localeCompare(a.nationality);
+        }
+        if (sortConfig.key === 'count') {
+            const countA = a.count || 1;
+            const countB = b.count || 1;
+            return sortConfig.direction === 'asc' ? countA - countB : countB - countA;
+        }
+        return 0;
+    });
+
+    return sortableItems;
+}, [interactions, searchTerm, sortConfig]);
+
+  const requestSort = (key: SortKey) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+        direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const clearNotification = () => {
+    if (notificationTimeoutRef.current) {
+        clearTimeout(notificationTimeoutRef.current);
+    }
+    setNotification('');
+    setLastAddedInteractionId(null);
+  };
+
+  const showNotification = (message: string, interactionId?: string) => {
+    clearNotification();
     setNotification(message);
-    setTimeout(() => setNotification(''), 2500);
+    if (interactionId) {
+        setLastAddedInteractionId(interactionId);
+    }
+
+    notificationTimeoutRef.current = window.setTimeout(() => {
+        clearNotification();
+    }, 5000); // Increased to 5 seconds
+  };
+  
+  const handleUndoAdd = () => {
+    if (lastAddedInteractionId) {
+        deleteInteraction(lastAddedInteractionId);
+        showNotification('Registo desfeito.');
+    }
   };
 
   const handleAddInteraction = (e: React.FormEvent) => {
@@ -184,8 +245,10 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
     const interactionCount = typeof count === 'number' ? count : parseInt(String(count) || '1', 10);
     const finalCount = interactionCount > 0 ? interactionCount : 1;
 
-    addInteraction(nationality, finalCount, visitReason, lengthOfStay);
-    showNotification(`Registo para ${finalCount}x '${nationality}' adicionado.`);
+    const newInteractionId = addInteraction(nationality, finalCount, visitReason, lengthOfStay);
+    if (newInteractionId) {
+        showNotification(`Registo para ${finalCount}x '${nationality}' adicionado.`, newInteractionId);
+    }
     
     // Reset form
     setNationality('');
@@ -199,12 +262,36 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
     countInputRef.current?.select();
   };
 
+  const SortableHeader: React.FC<{
+    columnKey: SortKey;
+    title: string;
+    className?: string;
+  }> = ({ columnKey, title, className }) => (
+    <th className={`py-3 px-4 font-semibold text-slate-600 ${className || ''}`}>
+        <button className="flex items-center gap-1 hover:text-slate-900 transition-colors" onClick={() => requestSort(columnKey)}>
+            {title}
+            {sortConfig.key === columnKey && (
+                sortConfig.direction === 'asc' 
+                ? <ArrowUpIcon className="w-4 h-4" /> 
+                : <ArrowDownIcon className="w-4 h-4" />
+            )}
+        </button>
+    </th>
+  );
 
   return (
     <div className="max-w-7xl mx-auto">
         {notification && (
-            <div className="fixed top-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg z-50 animate-pulse">
-                {notification}
+            <div className="fixed top-5 right-5 bg-green-600 text-white py-2 px-4 rounded-lg shadow-lg z-50 flex items-center gap-4">
+                <span>{notification}</span>
+                {lastAddedInteractionId && (
+                    <button 
+                        onClick={handleUndoAdd} 
+                        className="font-bold underline hover:text-green-100"
+                    >
+                        Desfazer
+                    </button>
+                )}
             </div>
         )}
         <datalist id="nationalities-all">
@@ -303,28 +390,46 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
 
             {/* Recent Interactions */}
             <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md border border-slate-200">
-                <h2 className="text-xl font-bold mb-4 text-slate-800">Os Seus Registos Recentes</h2>
+                <div className="flex justify-between items-center mb-4 flex-wrap gap-4">
+                     <h2 className="text-xl font-bold text-slate-800">Os Seus Registos Recentes</h2>
+                     <div className="relative">
+                         <SearchIcon className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"/>
+                         <input 
+                             type="text" 
+                             placeholder="Pesquisar nos registos..." 
+                             value={searchTerm} 
+                             onChange={(e) => setSearchTerm(e.target.value)}
+                             className="w-full sm:w-64 pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                         />
+                     </div>
+                </div>
                 <div className="overflow-x-auto max-h-[75vh] overflow-y-auto">
                     {interactions.length > 0 ? (
-                        <table className="w-full text-left table-fixed">
-                            <thead className="sticky top-0 bg-slate-100 z-10">
-                                <tr>
-                                    <th className="py-3 px-4 font-semibold text-slate-600 w-2/5">Nacionalidade e Detalhes</th>
-                                    <th className="py-3 px-4 font-semibold text-slate-600 w-2/5">Data e Hora</th>
-                                    <th className="py-3 px-4 font-semibold text-slate-600 text-right w-1/5">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {interactions.map((interaction) => (
-                                    <InteractionRow 
-                                        key={interaction.id}
-                                        interaction={interaction}
-                                        onUpdate={updateInteraction}
-                                        onDelete={deleteInteraction}
-                                    />
-                                ))}
-                            </tbody>
-                        </table>
+                        <>
+                        {processedInteractions.length > 0 ? (
+                            <table className="w-full text-left table-fixed">
+                                <thead className="sticky top-0 bg-slate-100 z-10">
+                                    <tr>
+                                        <SortableHeader columnKey="count" title="Pessoas" className="w-[15%]" />
+                                        <SortableHeader columnKey="nationality" title="Nacionalidade e Detalhes" className="w-[40%]" />
+                                        <SortableHeader columnKey="timestamp" title="Data e Hora" className="w-[30%]" />
+                                        <th className="py-3 px-4 font-semibold text-slate-600 text-right w-[15%]">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {processedInteractions.map((interaction) => (
+                                        <InteractionRow 
+                                            key={interaction.id}
+                                            interaction={interaction}
+                                            onUpdate={updateInteraction}
+                                        />
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <p className="text-center py-10 text-slate-500">Nenhum registo encontrado para a sua pesquisa.</p>
+                        )}
+                        </>
                     ) : (
                         <p className="text-center py-10 text-slate-500">Ainda não adicionou nenhum registo.</p>
                     )}
