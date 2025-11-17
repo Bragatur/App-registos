@@ -226,9 +226,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, addCollaborator, requestPassword
                 {/* BOTTOM ROW: INFORMATION */}
                 <div className="bg-white p-8 rounded-xl shadow-md border border-slate-200">
                     <div className="space-y-4 text-center">
-                        <h2 className="text-2xl font-bold text-slate-800 mb-4 flex items-center justify-center"><MailIcon className="w-6 h-6 mr-3 text-amber-600"/> Pedido de Informações</h2>
-                        <p className="text-slate-600">Para questões, recuperação de conta manual ou outros assuntos, por favor contacte o administrador através do email:</p>
-                        <a href="mailto:braga.turismo.2024@gmail.com" className="font-semibold text-blue-600 hover:underline break-all">braga.turismo.2024@gmail.com</a>
+                        <h2 className="text-2xl font-bold text-slate-800 mb-4 flex items-center justify-center"><MailIcon className="w-6 h-6 mr-3 text-blue-600"/> Pedido de Informações</h2>
+                        <p className="text-slate-600">Para questões, recuperação de conta manual ou outros assuntos, por favor clique no botão abaixo para contactar o administrador.</p>
+                        <a href={`mailto:turismobraga@protonmail.com?subject=${encodeURIComponent('Pedido de apoio app Registo de Atendimentos Turísticos')}`} className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">
+                            Contactar Administrador
+                        </a>
                     </div>
                 </div>
             </div>
