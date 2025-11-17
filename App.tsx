@@ -228,6 +228,10 @@ const App: React.FC = () => {
   };
   
   const deleteCollaborator = (id: string) => {
+    if (id === currentCollaborator?.id) {
+        showNotification('Não pode eliminar a sua própria conta.', 'error');
+        return;
+    }
     const targetUser = collaborators.find(c => c.id === id);
     if (!targetUser) return;
 
@@ -369,6 +373,10 @@ const App: React.FC = () => {
   };
 
   const resetCollaboratorInteractions = (collaboratorId: string) => {
+    if (collaboratorId === currentCollaborator?.id) {
+        showNotification('Não pode eliminar os seus próprios registos desta forma.', 'error');
+        return;
+    }
     const user = collaborators.find(c => c.id === collaboratorId);
     setInteractions(prev => prev.filter(i => i.collaboratorId !== collaboratorId));
     if (user) {

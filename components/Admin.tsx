@@ -102,6 +102,16 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
         </div>
         
+        <form onSubmit={handleProfileUpdate} className="space-y-3 border-t pt-4">
+          <h4 className="font-semibold text-slate-700">Alterar Nome</h4>
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="user-name">Nome de Utilizador</label>
+            <input id="user-name" type="text" value={newName} onChange={e => setNewName(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg"/>
+          </div>
+          {error && !newPassword && <p className="text-red-600 text-sm">{error}</p>}
+          <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors">Guardar Nome</button>
+        </form>
+
         <form onSubmit={handlePasswordReset} className="space-y-3 border-t pt-4">
           <h4 className="font-semibold text-slate-700">Redefinir Password</h4>
           <div>
@@ -112,7 +122,7 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
             <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="confirm-pass">Confirmar Nova Password</label>
             <input id="confirm-pass" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="••••••••" />
           </div>
-          {error && <p className="text-red-600 text-sm">{error}</p>}
+          {error && newPassword && <p className="text-red-600 text-sm">{error}</p>}
           <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors">Redefinir Password</button>
         </form>
 
@@ -137,13 +147,15 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={handleResetInteractions}
-                  className="flex-1 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                  disabled={isSelf}
+                  className="flex-1 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors disabled:bg-amber-300 disabled:cursor-not-allowed"
                 >
                   <RotateCcwIcon className="w-5 h-5"/> Eliminar Registos
                 </button>
                 <button
                   onClick={handleDeleteUser}
-                  className="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                  disabled={isSelf}
+                  className="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors disabled:bg-red-300 disabled:cursor-not-allowed"
                 >
                  <TrashIcon className="w-5 h-5" /> Eliminar Utilizador
                 </button>
