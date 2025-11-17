@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { Collaborator, Interaction, View, PRIMARY_ADMIN_ID, Notification as NotificationType } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -99,13 +100,13 @@ const App: React.FC = () => {
   const [notification, setNotification] = useState<NotificationType | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  const showNotification = (message: string, type: 'success' | 'error', undoAction?: () => void) => {
+  const showNotification = (message: React.ReactNode, type: 'success' | 'error', undoAction?: () => void) => {
     setNotification({ message, type, undoAction });
   };
   
   useEffect(() => {
     const ADMIN_USERNAME = 'admin';
-    const ADMIN_EMAIL = 'braga.turismo.2024@gmail.com';
+    const ADMIN_EMAIL = 'admin@test.com';
 
     setCollaborators(prev => {
       let updatedCollaborators = [...prev];
@@ -184,7 +185,7 @@ const App: React.FC = () => {
     
     setCurrentCollaborator(collaborator);
     setCurrentView('dashboard');
-    showNotification(`Bem-vindo, ${collaborator.name}!`, 'success');
+    showNotification(<span>Bem-vindo, <strong className="font-bold underline">{collaborator.name}</strong>!</span>, 'success');
   };
 
   const handleLogout = () => {
@@ -217,7 +218,7 @@ const App: React.FC = () => {
     setCollaborators(prev => [...prev, newCollaborator]);
     showNotification('Registo efetuado. Aguarde aprovação de um administrador.', 'success');
 
-    // const recipient = 'braga.turismo.2024@gmail.com';
+    // const recipient = 'admin@test.com';
     // const subject = 'Novo Pedido de Aprovação de Registo';
     // const body = `Um novo utilizador registou-se e aguarda aprovação.\n\nNome: ${newCollaborator.name}\nEmail: ${newCollaborator.email}\n\nPor favor, aceda ao painel de administração para aprovar ou recusar o registo.`;
     
@@ -442,8 +443,10 @@ const App: React.FC = () => {
       case 'admin':
         return (
           <Admin
+            allInteractions={interactions}
             collaborators={collaborators}
             currentAdminId={currentCollaborator.id}
+            showNotification={showNotification}
             onApprove={approveCollaborator}
             onReject={rejectCollaborator}
             onDelete={deleteCollaborator}

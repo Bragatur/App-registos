@@ -1,3 +1,5 @@
+import React from 'react';
+
 export const PRIMARY_ADMIN_ID = 'primary_admin_account';
 
 export interface Collaborator {
@@ -25,10 +27,10 @@ export interface Interaction {
 
 export type View = 'login' | 'dashboard' | 'reports' | 'admin';
 
-export type ReportPeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+export type ReportPeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
 
 export interface Notification {
-  message: string;
+  message: React.ReactNode;
   type: 'success' | 'error';
   undoAction?: () => void;
 }

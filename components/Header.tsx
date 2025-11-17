@@ -16,7 +16,7 @@ const NavButton: React.FC<{
     onClick: () => void;
     isActive: boolean;
     children: React.ReactNode;
-}> = ({ onClick, isActive, children }) => (
+} & React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ onClick, isActive, children, ...props }) => (
     <button 
         onClick={onClick} 
         className={`flex items-center space-x-2 px-4 py-2 rounded-md font-semibold transition-colors ${
@@ -24,6 +24,7 @@ const NavButton: React.FC<{
             ? 'bg-blue-600 text-white' 
             : 'text-slate-600 hover:bg-slate-200'
         }`}
+        {...props}
     >
         {children}
     </button>
@@ -39,16 +40,16 @@ const Header: React.FC<HeaderProps> = ({ collaborator, currentView, setView, onL
           <div className="flex items-center gap-8">
             <h1 className="text-xl font-bold text-slate-900">Posto de Turismo</h1>
             <nav className="hidden sm:flex items-center gap-4 bg-slate-100 p-1 rounded-lg">
-                <NavButton onClick={() => setView('dashboard')} isActive={currentView === 'dashboard'}>
+                <NavButton onClick={() => setView('dashboard')} isActive={currentView === 'dashboard'} title="Registar e gerir atendimentos">
                     <EditIcon className="w-5 h-5" />
                     <span>Atendimentos</span>
                 </NavButton>
-                <NavButton onClick={() => setView('reports')} isActive={currentView === 'reports'}>
+                <NavButton onClick={() => setView('reports')} isActive={currentView === 'reports'} title="Ver relatórios e estatísticas">
                     <ChartBarIcon className="w-5 h-5" />
                     <span>Relatórios</span>
                 </NavButton>
                  {collaborator.isAdmin && (
-                    <NavButton onClick={() => setView('admin')} isActive={currentView === 'admin'}>
+                    <NavButton onClick={() => setView('admin')} isActive={currentView === 'admin'} title="Painel de administração">
                         <ShieldCheckIcon className="w-5 h-5" />
                         <span>Admin</span>
                     </NavButton>
@@ -82,16 +83,16 @@ const Header: React.FC<HeaderProps> = ({ collaborator, currentView, setView, onL
 
         {/* Mobile Nav Below */}
         <nav className="sm:hidden flex items-center gap-4 bg-slate-100 p-1 rounded-lg mb-4 justify-start">
-            <NavButton onClick={() => setView('dashboard')} isActive={currentView === 'dashboard'}>
+            <NavButton onClick={() => setView('dashboard')} isActive={currentView === 'dashboard'} title="Registar e gerir atendimentos">
                 <EditIcon className="w-5 h-5" />
                 <span>Atendimentos</span>
             </NavButton>
-            <NavButton onClick={() => setView('reports')} isActive={currentView === 'reports'}>
+            <NavButton onClick={() => setView('reports')} isActive={currentView === 'reports'} title="Ver relatórios e estatísticas">
                 <ChartBarIcon className="w-5 h-5" />
                 <span>Relatórios</span>
             </NavButton>
             {collaborator.isAdmin && (
-                <NavButton onClick={() => setView('admin')} isActive={currentView === 'admin'}>
+                <NavButton onClick={() => setView('admin')} isActive={currentView === 'admin'} title="Painel de administração">
                     <ShieldCheckIcon className="w-5 h-5" />
                     <span>Admin</span>
                 </NavButton>

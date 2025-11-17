@@ -1,7 +1,11 @@
 
+
 import React, { useState, useRef } from 'react';
-import { Collaborator, PRIMARY_ADMIN_ID } from '../types';
-import { UsersIcon, CheckCircleIcon, XCircleIcon, CogIcon, ShieldCheckIcon, TrashIcon, RotateCcwIcon, AlertTriangleIcon } from './icons';
+import { Collaborator, PRIMARY_ADMIN_ID, Interaction } from '../types';
+import { UsersIcon, CheckCircleIcon, XCircleIcon, CogIcon, ShieldCheckIcon, TrashIcon, RotateCcwIcon, AlertTriangleIcon, FileSpreadsheetIcon } from './icons';
+
+// Declaração para a biblioteca XLSX carregada via CDN
+declare const XLSX: any;
 
 interface ManageUserModalProps {
   user: Collaborator;
@@ -208,8 +212,10 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
 
 
 interface AdminProps {
+  allInteractions: Interaction[];
   collaborators: Collaborator[];
   currentAdminId: string;
+  showNotification: (message: React.ReactNode, type: 'success' | 'error') => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onDelete: (id: string) => void;
@@ -220,8 +226,10 @@ interface AdminProps {
 }
 
 const Admin: React.FC<AdminProps> = ({ 
+  allInteractions,
   collaborators, 
-  currentAdminId, 
+  currentAdminId,
+  showNotification,
   onApprove, 
   onReject, 
   onDelete,
@@ -231,6 +239,7 @@ const Admin: React.FC<AdminProps> = ({
   onClearAllInteractions,
 }) => {
   const [managingUser, setManagingUser] = useState<Collaborator | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [globalConfirmation, setGlobalConfirmation] = useState<{
     message: string;
     onConfirm: () => void;
@@ -258,6 +267,99 @@ const Admin: React.FC<AdminProps> = ({
       confirmClass: 'bg-red-600 hover:bg-red-700'
     });
   };
+  
+  const handleExportCollaboratorTotals = () => {
+    setIsExporting(true);
+    showNotification('A preparar o seu relatório Excel...', 'success');
+
+    try {
+        const usersToReport = collaborators.filter(c => c.status === 'aprovado' && c.id !== PRIMARY_ADMIN_ID);
+        if (usersToReport.length === 0) {
+            showNotification('Não existem utilizadores para gerar o relatório.', 'error');
+            setIsExporting(false);
+            return;
+        }
+
+        const wb = XLSX.utils.book_new();
+
+        usersToReport.forEach(user => {
+            const userInteractions = allInteractions.filter(i => i.collaboratorId === user.id);
+            if (userInteractions.length === 0) {
+                const ws = XLSX.utils.aoa_to_sheet([[`Utilizador ${user.name} não tem registos.`]]);
+                XLSX.utils.book_append_sheet(wb, ws, user.name.substring(0, 31));
+                return;
+            }
+
+            const dataByMonth: { [monthYear: string]: { [nat: string]: number } } = {};
+            const allNationalities = new Set<string>();
+
+            userInteractions.forEach(interaction => {
+                const date = new Date(interaction.timestamp);
+                const month = date.toLocaleString('pt-PT', { month: 'short' });
+                const year = date.getFullYear();
+                const monthYearKey = `${month.charAt(0).toUpperCase() + month.slice(1)} ${year}`;
+                
+                if (!dataByMonth[monthYearKey]) dataByMonth[monthYearKey] = {};
+                
+                const currentCount = dataByMonth[monthYearKey][interaction.nationality] || 0;
+                dataByMonth[monthYearKey][interaction.nationality] = currentCount + (interaction.count || 1);
+                allNationalities.add(interaction.nationality);
+            });
+
+            const sortedNationalities = Array.from(allNationalities).sort((a, b) => a.localeCompare(b));
+            const monthOrder = ['Jan.', 'Fev.', 'Mar.', 'Abr.', 'Mai.', 'Jun.', 'Jul.', 'Ago.', 'Set.', 'Out.', 'Nov.', 'Dez.'];
+            
+            const sortedMonthYears = Object.keys(dataByMonth).sort((a, b) => {
+                const [monthA, yearA] = a.split(' ');
+                const [monthB, yearB] = b.split(' ');
+                if (parseInt(yearA) !== parseInt(yearB)) return parseInt(yearA) - parseInt(yearB);
+                return monthOrder.indexOf(monthA) - monthOrder.indexOf(monthB);
+            });
+
+            const sheetData: (string | number)[][] = [];
+            const header = ['Nacionalidade', ...sortedMonthYears, 'Total'];
+            sheetData.push(header);
+
+            sortedNationalities.forEach(nat => {
+                const row: (string | number)[] = [nat];
+                let rowTotal = 0;
+                sortedMonthYears.forEach(my => {
+                    const count = dataByMonth[my]?.[nat] || 0;
+                    row.push(count);
+                    rowTotal += count;
+                });
+                row.push(rowTotal);
+                sheetData.push(row);
+            });
+
+            const footer: (string | number)[] = ['Total'];
+            let grandTotal = 0;
+            sortedMonthYears.forEach((my, index) => {
+                const monthTotal = sortedNationalities.reduce((sum, nat) => sum + (dataByMonth[my]?.[nat] || 0), 0);
+                footer.push(monthTotal);
+                grandTotal += monthTotal;
+            });
+            footer.push(grandTotal);
+            sheetData.push(footer);
+
+            const ws = XLSX.utils.aoa_to_sheet(sheetData);
+            const colWidths = header.map(h => ({ wch: Math.max(h.length, 12) }));
+            colWidths[0].wch = Math.max(...sortedNationalities.map(n => n.length), 'Nacionalidade'.length) + 2;
+            ws['!cols'] = colWidths;
+            
+            XLSX.utils.book_append_sheet(wb, ws, user.name.substring(0, 31));
+        });
+
+        XLSX.writeFile(wb, "relatorio_por_colaborador.xlsx");
+        showNotification('Relatório exportado com sucesso!', 'success');
+    } catch (error) {
+        console.error("Erro ao exportar XLSX:", error);
+        showNotification('Ocorreu um erro ao gerar o relatório.', 'error');
+    } finally {
+        setIsExporting(false);
+    }
+  };
+
 
   return (
     <>
@@ -348,6 +450,24 @@ const Admin: React.FC<AdminProps> = ({
               </li>
             ))}
           </ul>
+        </div>
+        
+        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <h3 className="text-xl font-bold mb-4 text-slate-800 flex items-center">
+                <FileSpreadsheetIcon className="w-6 h-6 mr-3 text-green-600"/>
+                Exportações de Relatórios
+            </h3>
+            <p className="text-slate-600 mb-4">
+                Crie uma folha de cálculo Excel com os totais de visitantes, organizada por nacionalidade e por mês, para cada colaborador.
+            </p>
+            <button
+                onClick={handleExportCollaboratorTotals}
+                disabled={isExporting}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-colors disabled:bg-green-400 disabled:cursor-not-allowed"
+            >
+                <FileSpreadsheetIcon className="w-5 h-5 mr-2"/>
+                {isExporting ? 'A gerar...' : 'Exportar Totais por Colaborador (XLSX)'}
+            </button>
         </div>
         
         <div className="bg-red-50 border-t-4 border-red-400 p-6 rounded-lg shadow-md">

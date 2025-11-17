@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Interaction, Collaborator, ReportPeriod, PRIMARY_ADMIN_ID } from '../types';
 import { ALL_NATIONALITIES } from '../constants';
@@ -156,7 +157,7 @@ const EditInteractionModal: React.FC<EditInteractionModalProps> = ({ interaction
 interface ReportsProps {
   allInteractions: Interaction[];
   collaborators: Collaborator[];
-  showNotification: (message: string, type: 'success' | 'error') => void;
+  showNotification: (message: React.ReactNode, type: 'success' | 'error') => void;
   currentCollaborator: Collaborator | null;
   updateInteraction: (interaction: Interaction) => void;
 }
@@ -175,7 +176,14 @@ const KpiCard: React.FC<{ title: string; value: string | number; icon: React.Rea
 
 const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showNotification, currentCollaborator, updateInteraction }) => {
   const [period, setPeriod] = useState<ReportPeriod>('monthly');
-  const [selectedCollaborator, setSelectedCollaborator] = useState<string>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  
+  const isAdmin = currentCollaborator?.isAdmin === true;
+  const [selectedCollaborator, setSelectedCollaborator] = useState<string>(
+    isAdmin ? 'all' : currentCollaborator?.id || ''
+  );
+
   const [isExporting, setIsExporting] = useState(false);
   const [editingInteraction, setEditingInteraction] = useState<Interaction | null>(null);
   
@@ -183,55 +191,110 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
-  const isAdmin = currentCollaborator?.isAdmin === true;
-
   const periodLabels: Record<ReportPeriod, string> = {
     weekly: 'Últimos 7 dias',
     monthly: 'Este Mês',
     quarterly: 'Este Trimestre',
     yearly: 'Este Ano',
+    custom: 'Personalizado'
   };
 
-  const filteredInteractions = useMemo(() => {
+  useEffect(() => {
+    if (period !== 'custom') {
+      setStartDate('');
+      setEndDate('');
+    }
+  }, [period]);
+
+  const getDateRange = () => {
+      const now = new Date();
+      let effectiveStartDate: Date | null = null;
+      let effectiveEndDate: Date | null = null;
+      
+      if (period === 'custom') {
+          if (startDate) {
+              effectiveStartDate = new Date(startDate);
+              effectiveStartDate.setHours(0, 0, 0, 0);
+          }
+          if (endDate) {
+              effectiveEndDate = new Date(endDate);
+              effectiveEndDate.setHours(23, 59, 59, 999);
+          }
+      } else {
+          effectiveEndDate = new Date();
+          effectiveEndDate.setHours(23, 59, 59, 999);
+          let tempStartDate = new Date();
+
+          switch (period) {
+            case 'weekly':
+              tempStartDate.setDate(now.getDate() - 6);
+              tempStartDate.setHours(0, 0, 0, 0);
+              effectiveStartDate = tempStartDate;
+              break;
+            case 'monthly':
+              effectiveStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+              break;
+            case 'quarterly':
+              const quarter = Math.floor(now.getMonth() / 3);
+              effectiveStartDate = new Date(now.getFullYear(), quarter * 3, 1);
+              break;
+            case 'yearly':
+              effectiveStartDate = new Date(now.getFullYear(), 0, 1);
+              break;
+          }
+      }
+      return { effectiveStartDate, effectiveEndDate };
+  }
+
+  const interactionsForChartsAndKpis = useMemo(() => {
+    if (!currentCollaborator) return [];
+    
+    const { effectiveStartDate, effectiveEndDate } = getDateRange();
     const interactionsWithoutAdmin = allInteractions.filter(
         interaction => interaction.collaboratorId !== PRIMARY_ADMIN_ID
     );
 
-    const now = new Date();
-    let startDate = new Date();
-    now.setHours(23, 59, 59, 999);
+    return interactionsWithoutAdmin.filter(interaction => {
+      const interactionDate = new Date(interaction.timestamp);
+      const startDateMatch = !effectiveStartDate || interactionDate >= effectiveStartDate;
+      const endDateMatch = !effectiveEndDate || interactionDate <= effectiveEndDate;
+      
+      const collaboratorMatch = isAdmin 
+          ? (selectedCollaborator === 'all' || interaction.collaboratorId === selectedCollaborator)
+          : true;
+      
+      return startDateMatch && endDateMatch && collaboratorMatch;
+    });
+  }, [allInteractions, period, selectedCollaborator, startDate, endDate, currentCollaborator, isAdmin]);
 
-    switch (period) {
-      case 'weekly':
-        startDate.setDate(now.getDate() - 6);
-        startDate.setHours(0, 0, 0, 0);
-        break;
-      case 'monthly':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      case 'quarterly':
-        const quarter = Math.floor(now.getMonth() / 3);
-        startDate = new Date(now.getFullYear(), quarter * 3, 1);
-        break;
-      case 'yearly':
-        startDate = new Date(now.getFullYear(), 0, 1);
-        break;
-    }
-    
+  const interactionsForDetailedTable = useMemo(() => {
+    if (!currentCollaborator) return [];
+
+    const { effectiveStartDate, effectiveEndDate } = getDateRange();
+    const interactionsWithoutAdmin = allInteractions.filter(
+        interaction => interaction.collaboratorId !== PRIMARY_ADMIN_ID
+    );
+
     return interactionsWithoutAdmin
-        .filter(interaction => {
-            const interactionDate = new Date(interaction.timestamp);
-            const collaboratorMatch = selectedCollaborator === 'all' || interaction.collaboratorId === selectedCollaborator;
-            return interactionDate >= startDate && interactionDate <= now && collaboratorMatch;
-        })
-        .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [allInteractions, period, selectedCollaborator]);
+      .filter(interaction => {
+          const interactionDate = new Date(interaction.timestamp);
+          const startDateMatch = !effectiveStartDate || interactionDate >= effectiveStartDate;
+          const endDateMatch = !effectiveEndDate || interactionDate <= effectiveEndDate;
+          
+          const collaboratorMatch = isAdmin
+              ? (selectedCollaborator === 'all' || interaction.collaboratorId === selectedCollaborator)
+              : (interaction.collaboratorId === currentCollaborator?.id);
+          
+          return startDateMatch && endDateMatch && collaboratorMatch;
+      })
+      .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [allInteractions, period, selectedCollaborator, startDate, endDate, currentCollaborator, isAdmin]);
   
   // Pagination logic
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredInteractions.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredInteractions.length / itemsPerPage);
+  const currentItems = interactionsForDetailedTable.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(interactionsForDetailedTable.length / itemsPerPage);
 
   const paginate = (pageNumber: number) => {
     if (pageNumber > 0 && pageNumber <= totalPages) {
@@ -241,12 +304,12 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
   
   useEffect(() => {
       setCurrentPage(1);
-  }, [period, selectedCollaborator]);
+  }, [period, selectedCollaborator, startDate, endDate]);
 
 
   const nationalityData = useMemo(() => {
     const counts: { [key: string]: number } = {};
-    filteredInteractions.forEach(interaction => {
+    interactionsForChartsAndKpis.forEach(interaction => {
       const count = interaction.count || 1;
       counts[interaction.nationality] = (counts[interaction.nationality] || 0) + count;
     });
@@ -254,7 +317,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     return Object.entries(counts)
       .map(([name, count]) => ({ Nacionalidade: name, Visitantes: count }))
       .sort((a, b) => b.Visitantes - a.Visitantes);
-  }, [filteredInteractions]);
+  }, [interactionsForChartsAndKpis]);
   
   const mapData = useMemo(() => {
     const top10 = nationalityData.slice(0, 10);
@@ -270,11 +333,11 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
 
   const kpis = useMemo(() => {
     const totalVisitors = nationalityData.reduce((sum, item) => sum + item.Visitantes, 0);
-    const totalInteractions = filteredInteractions.length;
+    const totalInteractions = interactionsForChartsAndKpis.length;
     const averageGroupSize = totalInteractions > 0 ? (totalVisitors / totalInteractions).toFixed(2) : 0;
     const topNationality = nationalityData.length > 0 ? nationalityData[0].Nacionalidade : 'N/A';
     return { totalVisitors, totalInteractions, averageGroupSize, topNationality };
-  }, [nationalityData, filteredInteractions]);
+  }, [nationalityData, interactionsForChartsAndKpis]);
   
   const pieChartData = useMemo(() => {
     const top5 = nationalityData.slice(0, 5).map(item => ({name: item.Nacionalidade, visitantes: item.Visitantes}));
@@ -288,14 +351,14 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
 
   const trendData = useMemo(() => {
     const grouper = (date: Date) => {
-        if(period === 'quarterly' || period === 'yearly') {
+        if(period === 'quarterly' || period === 'yearly' || (period === 'custom' && startDate && endDate && (new Date(endDate).getTime() - new Date(startDate).getTime()) > 31 * 24 * 60 * 60 * 1000)) {
             return date.toLocaleString('pt-PT', { month: 'short', year: '2-digit' });
         }
         return date.toLocaleDateString('pt-PT', {day: '2-digit', month: 'short'});
     };
 
     const trendCounts = new Map<string, number>();
-    const sortedInteractions = [...filteredInteractions].sort(
+    const sortedInteractions = [...interactionsForChartsAndKpis].sort(
         (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
@@ -308,11 +371,11 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     return Array.from(trendCounts.entries())
         .map(([date, visitantes]) => ({date, visitantes}))
         .slice(-30);
-  }, [filteredInteractions, period]);
+  }, [interactionsForChartsAndKpis, period, startDate, endDate]);
 
   const visitReasonData = useMemo(() => {
     const counts: { [key: string]: number } = {};
-    filteredInteractions.forEach(interaction => {
+    interactionsForChartsAndKpis.forEach(interaction => {
       if (interaction.visitReason && interaction.visitReason.trim()) {
         const reason = interaction.visitReason.trim();
         const capitalizedReason = reason.charAt(0).toUpperCase() + reason.slice(1).toLowerCase();
@@ -325,11 +388,11 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
       .map(([name, count]) => ({ Motivo: name, Visitantes: count }))
       .sort((a, b) => b.Visitantes - a.Visitantes)
       .slice(0, 10);
-  }, [filteredInteractions]);
+  }, [interactionsForChartsAndKpis]);
 
   const lengthOfStayData = useMemo(() => {
     const counts: { [key: string]: number } = {};
-    filteredInteractions.forEach(interaction => {
+    interactionsForChartsAndKpis.forEach(interaction => {
       if (interaction.lengthOfStay && interaction.lengthOfStay.trim()) {
         const stay = interaction.lengthOfStay.trim();
         const capitalizedStay = stay.charAt(0).toUpperCase() + stay.slice(1).toLowerCase();
@@ -342,7 +405,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
       .map(([name, count]) => ({ Duração: name, Visitantes: count }))
       .sort((a, b) => b.Visitantes - a.Visitantes)
       .slice(0, 10);
-  }, [filteredInteractions]);
+  }, [interactionsForChartsAndKpis]);
 
   const nationalityChartHeight = useMemo(() => {
     const minHeight = 400;
@@ -350,7 +413,15 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     return Math.max(minHeight, nationalityData.length * heightPerBar);
   }, [nationalityData]);
 
-  const getFilename = () => `relatorio_${period}_${selectedCollaborator === 'all' ? 'todos' : 'colaborador'}`;
+  const getFilename = () => {
+    const periodString = period === 'custom' && (startDate || endDate)
+        ? `de_${startDate}_ate_${endDate}`.replace(/-/g, '')
+        : period;
+    const collaboratorName = selectedCollaborator === 'all' 
+      ? 'todos' 
+      : (collaborators.find(c => c.id === selectedCollaborator)?.name || 'colaborador').replace(/\s+/g, '_');
+    return `relatorio_${periodString}_${collaboratorName}`;
+  }
 
   const getChartAsImage = async (elementId: string): Promise<string | null> => {
     const element = document.getElementById(elementId);
@@ -366,17 +437,21 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
   };
   
   const handleExportXLSX = async () => {
-    if (filteredInteractions.length === 0) {
+    if (interactionsForChartsAndKpis.length === 0) {
         showNotification("Não há dados para exportar.", "error");
         return;
     }
     setIsExporting(true);
 
     const wb = XLSX.utils.book_new();
+    
+    const periodLabel = period === 'custom' && (startDate || endDate) 
+        ? `De ${startDate || '(início)'} a ${endDate || '(fim)'}` 
+        : periodLabels[period];
 
     const summaryData = [
         ["Relatório de Atendimentos Turísticos"], [],
-        ["Período", periodLabels[period]],
+        ["Período", periodLabel],
         ["Colaborador", selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name],
         ["Data de Exportação", new Date().toLocaleString('pt-PT')], [],
         ["Indicadores Chave de Desempenho (KPIs)"], ["Métrica", "Valor"],
@@ -426,7 +501,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
   };
 
   const handleExportPDF = async () => {
-    if (filteredInteractions.length === 0) {
+    if (interactionsForChartsAndKpis.length === 0) {
         showNotification("Não há dados para exportar.", "error");
         return;
     }
@@ -439,6 +514,10 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     const pageMargin = 15;
     const pageWidth = doc.internal.pageSize.getWidth();
     const contentWidth = pageWidth - (pageMargin * 2);
+    
+    const periodLabel = period === 'custom' && (startDate || endDate) 
+        ? `De ${startDate || '(início)'} a ${endDate || '(fim)'}` 
+        : periodLabels[period];
 
     doc.setFontSize(18);
     doc.text("Relatório de Atendimentos Turísticos", pageMargin, yPos);
@@ -446,7 +525,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     
     doc.setFontSize(11);
     doc.setTextColor(100);
-    doc.text(`Período: ${periodLabels[period]}`, pageMargin, yPos);
+    doc.text(`Período: ${periodLabel}`, pageMargin, yPos);
     doc.text(`Colaborador: ${selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name}`, pageWidth / 2, yPos);
     yPos += 10;
 
@@ -528,28 +607,54 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
 
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-3xl font-bold text-slate-800">Relatórios</h2>
-            <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
-                    {(Object.keys(periodLabels) as ReportPeriod[]).map(p => (
-                        <button key={p} onClick={() => setPeriod(p)} className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${period === p ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}>{periodLabels[p]}</button>
-                    ))}
+            <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
+                 <div className="flex flex-wrap items-center justify-end gap-2">
+                    <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                        {(Object.keys(periodLabels) as ReportPeriod[]).map(p => (
+                            <button key={p} onClick={() => setPeriod(p)} className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${period === p ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}>{periodLabels[p]}</button>
+                        ))}
+                    </div>
+                    {isAdmin && (
+                        <select value={selectedCollaborator} onChange={(e) => setSelectedCollaborator(e.target.value)} className="px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500">
+                            <option value="all">Todos</option>
+                            {collaborators.filter(c => c.status === 'aprovado' && c.id !== PRIMARY_ADMIN_ID).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    )}
+                    <button onClick={handleExportXLSX} disabled={isExporting} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors disabled:bg-slate-200 disabled:cursor-not-allowed">
+                        <FileSpreadsheetIcon className="w-5 h-5 text-green-600" />
+                        <span className="hidden sm:inline">{isExporting ? 'A gerar...' : 'XLSX'}</span>
+                    </button>
+                    <button onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors disabled:bg-slate-200 disabled:cursor-not-allowed">
+                        <FileTextIcon className="w-5 h-5 text-red-600" />
+                        <span className="hidden sm:inline">{isExporting ? 'A gerar...' : 'PDF'}</span>
+                    </button>
                 </div>
-                 <select value={selectedCollaborator} onChange={(e) => setSelectedCollaborator(e.target.value)} className="px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500">
-                    <option value="all">Todos</option>
-                    {collaborators.filter(c => c.status === 'aprovado' && c.id !== PRIMARY_ADMIN_ID).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <button onClick={handleExportXLSX} disabled={isExporting} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors disabled:bg-slate-200 disabled:cursor-not-allowed">
-                    <FileSpreadsheetIcon className="w-5 h-5 text-green-600" />
-                    <span className="hidden sm:inline">{isExporting ? 'A gerar...' : 'XLSX'}</span>
-                </button>
-                <button onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors disabled:bg-slate-200 disabled:cursor-not-allowed">
-                    <FileTextIcon className="w-5 h-5 text-red-600" />
-                    <span className="hidden sm:inline">{isExporting ? 'A gerar...' : 'PDF'}</span>
-                </button>
+                {period === 'custom' && (
+                    <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm animate-fade-in">
+                        <label htmlFor="start-date" className="text-sm font-semibold text-slate-600">De:</label>
+                        <input
+                            id="start-date"
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="px-2 py-1 rounded-md text-sm font-semibold bg-slate-50 text-slate-700 border border-slate-300 focus:ring-1 focus:ring-blue-500"
+                            max={endDate || undefined}
+                        />
+                        <label htmlFor="end-date" className="text-sm font-semibold text-slate-600">Até:</label>
+                        <input
+                            id="end-date"
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="px-2 py-1 rounded-md text-sm font-semibold bg-slate-50 text-slate-700 border border-slate-300 focus:ring-1 focus:ring-blue-500"
+                            min={startDate || undefined}
+                        />
+                    </div>
+                )}
             </div>
         </div>
         
-        {filteredInteractions.length > 0 ? (
+        {interactionsForChartsAndKpis.length > 0 ? (
         <div className="space-y-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <KpiCard title="Total de Visitantes" value={kpis.totalVisitors} icon={<UsersIcon className="w-6 h-6"/>}/>
@@ -638,62 +743,64 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
                 </div>
             </div>
 
-            {/* Admin-only: All Records Table */}
-            {isAdmin && (
-                <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-                    <h3 className="text-xl font-bold mb-4 text-slate-800">Todos os Registos</h3>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-100">
-                                <tr>
-                                    <th className="p-3 font-semibold text-slate-600">Pessoas</th>
-                                    <th className="p-3 font-semibold text-slate-600">Nacionalidade e Detalhes</th>
-                                    <th className="p-3 font-semibold text-slate-600">Data</th>
-                                    <th className="p-3 font-semibold text-slate-600">Colaborador</th>
-                                    <th className="p-3 font-semibold text-slate-600 text-right">Ações</th>
+            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                <h3 className="text-xl font-bold mb-4 text-slate-800">{isAdmin ? 'Todos os Registos' : 'Os Seus Registos'}</h3>
+                {interactionsForDetailedTable.length > 0 ? (
+                <>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead className="bg-slate-100">
+                            <tr>
+                                <th className="p-3 font-semibold text-slate-600">Pessoas</th>
+                                <th className="p-3 font-semibold text-slate-600">Nacionalidade e Detalhes</th>
+                                <th className="p-3 font-semibold text-slate-600">Data</th>
+                                {isAdmin && <th className="p-3 font-semibold text-slate-600">Colaborador</th>}
+                                <th className="p-3 font-semibold text-slate-600 text-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {currentItems.map(interaction => (
+                                <tr key={interaction.id} className="border-b border-slate-200 hover:bg-slate-50">
+                                    <td className="p-3 font-bold">{interaction.count}x</td>
+                                    <td className="p-3">
+                                            <div>
+                                            <span className="font-medium text-slate-800">{interaction.nationality}</span>
+                                            {(interaction.visitReason || interaction.lengthOfStay) && (
+                                                <div className="text-xs text-slate-500 mt-1 space-y-1 max-w-xs">
+                                                    {interaction.visitReason && <p className="flex items-start"><BookOpenIcon className="w-3 h-3 mr-1.5 shrink-0 mt-0.5"/> <span>{interaction.visitReason}</span></p>}
+                                                    {interaction.lengthOfStay && <p className="flex items-start"><ClockIcon className="w-3 h-3 mr-1.5 shrink-0 mt-0.5"/> <span>{interaction.lengthOfStay}</span></p>}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="p-3 text-sm text-slate-500">{new Date(interaction.timestamp).toLocaleString('pt-PT')}</td>
+                                    {isAdmin && <td className="p-3 text-sm">{collaborators.find(c => c.id === interaction.collaboratorId)?.name || 'N/A'}</td>}
+                                    <td className="p-3 text-right">
+                                        <button 
+                                            onClick={() => setEditingInteraction(interaction)} 
+                                            className="text-slate-500 hover:text-blue-600 p-2 rounded-full hover:bg-blue-100 transition-colors"
+                                            aria-label="Editar"
+                                        >
+                                            <EditIcon className="w-5 h-5" />
+                                        </button>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                {currentItems.map(interaction => (
-                                    <tr key={interaction.id} className="border-b border-slate-200 hover:bg-slate-50">
-                                        <td className="p-3 font-bold">{interaction.count}x</td>
-                                        <td className="p-3">
-                                             <div>
-                                                <span className="font-medium text-slate-800">{interaction.nationality}</span>
-                                                {(interaction.visitReason || interaction.lengthOfStay) && (
-                                                    <div className="text-xs text-slate-500 mt-1 space-y-1 max-w-xs">
-                                                        {interaction.visitReason && <p className="flex items-start"><BookOpenIcon className="w-3 h-3 mr-1.5 shrink-0 mt-0.5"/> <span>{interaction.visitReason}</span></p>}
-                                                        {interaction.lengthOfStay && <p className="flex items-start"><ClockIcon className="w-3 h-3 mr-1.5 shrink-0 mt-0.5"/> <span>{interaction.lengthOfStay}</span></p>}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="p-3 text-sm text-slate-500">{new Date(interaction.timestamp).toLocaleString('pt-PT')}</td>
-                                        <td className="p-3 text-sm">{collaborators.find(c => c.id === interaction.collaboratorId)?.name || 'N/A'}</td>
-                                        <td className="p-3 text-right">
-                                            <button 
-                                                onClick={() => setEditingInteraction(interaction)} 
-                                                className="text-slate-500 hover:text-blue-600 p-2 rounded-full hover:bg-blue-100 transition-colors"
-                                                aria-label="Editar"
-                                            >
-                                                <EditIcon className="w-5 h-5" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                     {totalPages > 1 && (
-                        <div className="flex justify-between items-center mt-4">
-                            <button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} className="px-4 py-2 bg-slate-200 rounded-md disabled:opacity-50">Anterior</button>
-                            <span>Página {currentPage} de {totalPages}</span>
-                            <button onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages} className="px-4 py-2 bg-slate-200 rounded-md disabled:opacity-50">Próxima</button>
-                        </div>
-                    )}
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
-            )}
-
+                    {totalPages > 1 && (
+                    <div className="flex justify-between items-center mt-4">
+                        <button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} className="px-4 py-2 bg-slate-200 rounded-md disabled:opacity-50">Anterior</button>
+                        <span>Página {currentPage} de {totalPages}</span>
+                        <button onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages} className="px-4 py-2 bg-slate-200 rounded-md disabled:opacity-50">Próxima</button>
+                    </div>
+                )}
+                </>
+                ) : (
+                    <p className="text-center text-slate-500 py-10">Não foram encontrados registos detalhados para a sua seleção.</p>
+                )}
+            </div>
         </div>
         ) : (
             <div className="text-center py-20 text-slate-500 bg-white rounded-xl shadow-md border border-slate-200">
