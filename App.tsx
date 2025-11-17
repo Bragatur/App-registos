@@ -43,10 +43,11 @@ const Notification: React.FC<{ notification: NotificationType | null, onDismiss:
 
 interface ChangePasswordModalProps {
   onClose: () => void;
-  onSubmit: (newPassword: string) => void;
+  onSubmit: (currentPassword: string, newPassword: string) => void;
 }
 
 const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onClose, onSubmit }) => {
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -54,10 +55,10 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onClose, onSu
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPassword || newPassword !== confirmPassword) {
-      setError('As passwords não coincidem ou estão em branco.');
+      setError('As novas passwords não coincidem ou estão em branco.');
       return;
     }
-    onSubmit(newPassword);
+    onSubmit(currentPassword, newPassword);
   };
 
   return (
@@ -68,10 +69,14 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onClose, onSu
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <p className="text-sm text-slate-600">Por segurança, defina uma nova password pessoal para a sua conta.</p>
+          <p className="text-sm text-slate-600">Para sua segurança, introduza a sua password atual antes de definir uma nova.</p>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="current-password-modal">Password Atual</label>
+            <input id="current-password-modal" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" required autoFocus />
+          </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="new-password-modal">Nova Password</label>
-            <input id="new-password-modal" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" required autoFocus />
+            <input id="new-password-modal" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" required />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="confirm-password-modal">Confirmar Nova Password</label>
@@ -280,8 +285,13 @@ const App: React.FC = () => {
     return { name: userToReset.name, newPassword };
   };
 
-  const handleChangePassword = (newPassword: string) => {
+  const handleChangePassword = (currentPassword: string, newPassword: string) => {
     if (!currentCollaborator) return;
+
+    if (currentCollaborator.password !== currentPassword) {
+        showNotification('A password atual está incorreta.', 'error');
+        return;
+    }
 
     const updatedCollaborator: Collaborator = {
       ...currentCollaborator,
@@ -465,6 +475,7 @@ const App: React.FC = () => {
           currentView={currentView}
           setView={setCurrentView}
           onLogout={handleLogout} 
+          onChangePasswordClick={() => setIsChangingPassword(true)}
         />
       )}
       <main className="p-4 sm:p-6 lg:p-8">

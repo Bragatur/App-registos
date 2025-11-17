@@ -1,15 +1,15 @@
 
 
-
 import React from 'react';
 import { Collaborator, View } from '../types';
-import { ChartBarIcon, EditIcon, LogOutIcon, ShieldCheckIcon } from './icons';
+import { ChartBarIcon, EditIcon, LogOutIcon, ShieldCheckIcon, KeyIcon } from './icons';
 
 interface HeaderProps {
   collaborator: Collaborator;
   currentView: View;
   setView: (view: View) => void;
   onLogout: () => void;
+  onChangePasswordClick: () => void;
 }
 
 const NavButton: React.FC<{
@@ -29,7 +29,7 @@ const NavButton: React.FC<{
     </button>
 )
 
-const Header: React.FC<HeaderProps> = ({ collaborator, currentView, setView, onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ collaborator, currentView, setView, onLogout, onChangePasswordClick }) => {
   return (
     <header className="bg-white shadow-sm sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -61,6 +61,14 @@ const Header: React.FC<HeaderProps> = ({ collaborator, currentView, setView, onL
             <span className="text-sm font-medium text-slate-600 hidden md:block">
               Bem-vindo, <span className="font-bold">{collaborator.name}</span>
             </span>
+             <button
+              onClick={onChangePasswordClick}
+              className="flex items-center space-x-2 text-slate-600 hover:text-blue-600 font-semibold p-2 rounded-md hover:bg-blue-100 transition-colors"
+              title="Alterar Password"
+            >
+              <KeyIcon className="w-5 h-5" />
+              <span className="hidden sm:inline">Alterar Password</span>
+            </button>
             <button
               onClick={onLogout}
               className="flex items-center space-x-2 text-slate-600 hover:text-red-600 font-semibold p-2 rounded-md hover:bg-red-100 transition-colors"
