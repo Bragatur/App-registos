@@ -230,6 +230,10 @@ const App: React.FC = () => {
     setInteractions(prev => prev.filter((i) => i.id !== id));
   };
 
+  const resetCollaboratorInteractions = (collaboratorId: string) => {
+    setInteractions(prev => prev.filter(i => i.collaboratorId !== collaboratorId));
+  };
+
   const renderContent = () => {
     if (!currentCollaborator || currentView === 'login') {
       return <Login onLogin={handleLogin} addCollaborator={addCollaborator} requestPasswordReset={requestPasswordReset} collaborators={collaborators}/>;
@@ -259,6 +263,7 @@ const App: React.FC = () => {
             onResetPassword={resetUserPassword}
             onToggleAdmin={toggleAdminStatus}
             onUpdateProfile={updateCollaboratorProfile}
+            onResetInteractions={resetCollaboratorInteractions}
           />
         );
       default:

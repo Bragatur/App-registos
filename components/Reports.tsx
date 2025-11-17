@@ -1,12 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Interaction, Collaborator, ReportPeriod } from '../types';
 import { ALL_NATIONALITIES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon } from './icons';
+import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, MapIcon } from './icons';
 
 // Declaração para bibliotecas globais carregadas via CDN
 declare const XLSX: any;
 declare const jsPDF: any;
+declare const html2canvas: any;
+declare const jsVectorMap: any;
 
 // FIX: Add jspdf to the global Window interface to fix type error for CDN library.
 declare global {
@@ -15,6 +17,58 @@ declare global {
   }
 }
 
+// Mapeamento de nomes de países para códigos ISO 3166-1 alpha-2
+const countryNameToCode: { [key: string]: string } = {
+    'Portugal': 'PT', 'Espanha': 'ES', 'França': 'FR', 'Reino Unido': 'GB', 'Alemanha': 'DE',
+    'Bélgica': 'BE', 'Brasil': 'BR', 'EUA': 'US', 'Itália': 'IT', 'Países Baixos': 'NL',
+    'Polónia': 'PL', 'Irlanda': 'IE', 'Suíça': 'CH', 'Canadá': 'CA', 'Austrália': 'AU',
+    'Argentina': 'AR', 'China': 'CN', 'Japão': 'JP', 'Rússia': 'RU', 'Índia': 'IN',
+    'África do Sul': 'ZA', 'Suécia': 'SE', 'Noruega': 'NO', 'Dinamarca': 'DK', 'Áustria': 'AT',
+    'México': 'MX', 'Coreia do Sul': 'KR', 'Estados Unidos': 'US',
+};
+
+const WorldMapChart: React.FC<{ data: { [key: string]: number } }> = ({ data }) => {
+    const mapRef = useRef<HTMLDivElement>(null);
+    const mapInstance = useRef<any>(null);
+
+    useEffect(() => {
+        if (mapRef.current && data && Object.keys(data).length > 0) {
+            if (mapInstance.current) {
+                mapInstance.current.destroy();
+            }
+            mapInstance.current = new jsVectorMap({
+                selector: mapRef.current,
+                map: 'world',
+                zoomOnScroll: false,
+                series: {
+                    regions: [{
+                        values: data,
+                        scale: ['#d1e6fa', '#3b82f6', '#1e40af'],
+                        normalizeFunction: 'polynomial',
+                    }]
+                },
+                regionStyle: {
+                    initial: { fill: '#e4e4e7' },
+                    hover: { fill: '#f59e0b' }
+                },
+                onRegionTooltipShow: (_: any, tooltip: any, code: string) => {
+                    tooltip.css({ backgroundColor: '#1f2937', color: 'white' });
+                    const count = data[code] || 'N/A';
+                    tooltip.text(`${tooltip.text()} - ${count} Visitantes`, true);
+                },
+            });
+        }
+
+        return () => {
+            if (mapInstance.current) {
+                mapInstance.current.destroy();
+                mapInstance.current = null;
+            }
+        };
+    }, [data]);
+
+    return <div ref={mapRef} style={{ width: '100%', height: '400px' }}></div>;
+};
 
 interface ReportsProps {
   allInteractions: Interaction[];
@@ -36,21 +90,7 @@ const KpiCard: React.FC<{ title: string; value: string | number; icon: React.Rea
 const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => {
   const [period, setPeriod] = useState<ReportPeriod>('monthly');
   const [selectedCollaborator, setSelectedCollaborator] = useState<string>('all');
-  const [nationalityFilter, setNationalityFilter] = useState<string>('');
-  const [visitReasonFilter, setVisitReasonFilter] = useState<string>('');
-  const [lengthOfStayFilter, setLengthOfStayFilter] = useState<string>('');
-
-  const uniqueVisitReasons = useMemo(() => {
-    const reasons = new Set<string>();
-    allInteractions.forEach(i => i.visitReason && reasons.add(i.visitReason));
-    return Array.from(reasons).sort();
-  }, [allInteractions]);
-
-  const uniqueLengthsOfStay = useMemo(() => {
-    const stays = new Set<string>();
-    allInteractions.forEach(i => i.lengthOfStay && stays.add(i.lengthOfStay));
-    return Array.from(stays).sort();
-  }, [allInteractions]);
+  const [isExporting, setIsExporting] = useState(false);
 
   const periodLabels: Record<ReportPeriod, string> = {
     weekly: 'Últimos 7 dias',
@@ -62,7 +102,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
   const filteredInteractions = useMemo(() => {
     const now = new Date();
     let startDate = new Date();
-    now.setHours(23, 59, 59, 999); // Include all of today
+    now.setHours(23, 59, 59, 999);
 
     switch (period) {
       case 'weekly':
@@ -84,13 +124,9 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     return allInteractions.filter(interaction => {
         const interactionDate = new Date(interaction.timestamp);
         const collaboratorMatch = selectedCollaborator === 'all' || interaction.collaboratorId === selectedCollaborator;
-        const nationalityMatch = !nationalityFilter || interaction.nationality.toLowerCase().includes(nationalityFilter.toLowerCase());
-        const visitReasonMatch = !visitReasonFilter || (interaction.visitReason && interaction.visitReason.toLowerCase().includes(visitReasonFilter.toLowerCase()));
-        const lengthOfStayMatch = !lengthOfStayFilter || (interaction.lengthOfStay && interaction.lengthOfStay.toLowerCase().includes(lengthOfStayFilter.toLowerCase()));
-        
-        return interactionDate >= startDate && interactionDate <= now && collaboratorMatch && nationalityMatch && visitReasonMatch && lengthOfStayMatch;
+        return interactionDate >= startDate && interactionDate <= now && collaboratorMatch;
     });
-  }, [allInteractions, period, selectedCollaborator, nationalityFilter, visitReasonFilter, lengthOfStayFilter]);
+  }, [allInteractions, period, selectedCollaborator]);
 
   const nationalityData = useMemo(() => {
     const counts: { [key: string]: number } = {};
@@ -103,6 +139,18 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
       .map(([name, count]) => ({ Nacionalidade: name, Visitantes: count }))
       .sort((a, b) => b.Visitantes - a.Visitantes);
   }, [filteredInteractions]);
+  
+  const mapData = useMemo(() => {
+    const top10 = nationalityData.slice(0, 10);
+    const data: { [key: string]: number } = {};
+    top10.forEach(item => {
+        const code = countryNameToCode[item.Nacionalidade];
+        if (code) {
+            data[code] = item.Visitantes;
+        }
+    });
+    return data;
+  }, [nationalityData]);
 
   const kpis = useMemo(() => {
     const totalVisitors = nationalityData.reduce((sum, item) => sum + item.Visitantes, 0);
@@ -127,14 +175,10 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
         if(period === 'quarterly' || period === 'yearly') {
             return date.toLocaleString('pt-PT', { month: 'short', year: '2-digit' });
         }
-        return date.toLocaleDateString('pt-PT', {day: '2-digit', month: 'short'}); // Group by day for weekly/monthly
+        return date.toLocaleDateString('pt-PT', {day: '2-digit', month: 'short'});
     };
 
-    // FIX: Refactored to correctly sort and group trend data, which resolves the 'new Date()' type error on invalid date strings.
-    // Use a Map to preserve insertion order after sorting.
     const trendCounts = new Map<string, number>();
-
-    // Sort interactions chronologically to ensure the map preserves the correct order.
     const sortedInteractions = [...filteredInteractions].sort(
         (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
@@ -147,7 +191,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     
     return Array.from(trendCounts.entries())
         .map(([date, visitantes]) => ({date, visitantes}))
-        .slice(-30); // Show last 30 data points to avoid clutter
+        .slice(-30);
   }, [filteredInteractions, period]);
 
   const visitReasonData = useMemo(() => {
@@ -190,33 +234,30 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     return Math.max(minHeight, nationalityData.length * heightPerBar);
   }, [nationalityData]);
 
-  const getFilename = () => {
-    const collaboratorName = selectedCollaborator === 'all' ? 'todos' : collaborators.find(c => c.id === selectedCollaborator)?.name || 'desconhecido';
-    const filenameParts = [`relatorio`, period, collaboratorName.replace(/\s/g, '_')];
-    if (nationalityFilter) filenameParts.push(`nac-${nationalityFilter.replace(/\s/g, '_')}`);
-    if (visitReasonFilter) filenameParts.push(`motivo-${visitReasonFilter.replace(/\s/g, '_')}`);
-    if (lengthOfStayFilter) filenameParts.push(`estadia-${lengthOfStayFilter.replace(/\s/g, '_')}`);
-    return filenameParts.join('_');
-  };
+  const getFilename = () => `relatorio_${period}_${selectedCollaborator === 'all' ? 'todos' : 'colaborador'}`;
 
-  const handleExportXLSX = () => {
+  const getChartAsImage = async (elementId: string): Promise<string | null> => {
+    const element = document.getElementById(elementId);
+    if (!element) return null;
+    const canvas = await html2canvas(element, { backgroundColor: '#ffffff', scale: 2 });
+    return canvas.toDataURL('image/png', 0.9);
+  };
+  
+  const handleExportXLSX = async () => {
     if (filteredInteractions.length === 0) {
         alert("Não há dados para exportar.");
         return;
     }
-    
+    setIsExporting(true);
+
     const wb = XLSX.utils.book_new();
 
-    // --- Resumo Sheet ---
     const summaryData = [
-        ["Relatório de Atendimentos Turísticos"],
-        [],
+        ["Relatório de Atendimentos Turísticos"], [],
         ["Período", periodLabels[period]],
         ["Colaborador", selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name],
-        ["Data de Exportação", new Date().toLocaleString('pt-PT')],
-        [],
-        ["Indicadores Chave de Desempenho (KPIs)"],
-        ["Métrica", "Valor"],
+        ["Data de Exportação", new Date().toLocaleString('pt-PT')], [],
+        ["Indicadores Chave de Desempenho (KPIs)"], ["Métrica", "Valor"],
         ["Total de Visitantes", kpis.totalVisitors],
         ["Total de Atendimentos", kpis.totalInteractions],
         ["Média por Grupo", kpis.averageGroupSize],
@@ -224,14 +265,26 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     ];
     const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
     wsSummary['!cols'] = [{ wch: 40 }, { wch: 20 }];
-    wsSummary["A1"].s = { font: { bold: true, sz: 16 }};
-    wsSummary["A7"].s = { font: { bold: true, sz: 14 }};
-    wsSummary["A8"].s = { font: { bold: true }};
-    wsSummary["B8"].s = { font: { bold: true }};
+    wsSummary["A1"].s = { font: { bold: true, sz: 16 } };
+    wsSummary["A7"].s = { font: { bold: true, sz: 14 } };
     XLSX.utils.book_append_sheet(wb, wsSummary, "Resumo");
+    
+    const visualDashboardData = [
+      ["Dashboard Visual"], [],
+      ["Nota:", "Para uma experiência visual completa com gráficos, por favor, utilize a exportação para PDF."], [],
+      ["Mapa-Mundo", "Disponível no PDF"],
+      ["Tendência de Visitantes", "Disponível no PDF"],
+      ["Distribuição de Nacionalidades", "Disponível no PDF"],
+      ["Visitantes por Nacionalidade", "Disponível no PDF"],
+      ["Top Motivos de Visita", "Disponível no PDF"],
+      ["Top Duração da Estadia", "Disponível no PDF"],
+    ];
+    const wsVisual = XLSX.utils.aoa_to_sheet(visualDashboardData);
+    wsVisual['!cols'] = [{ wch: 30 }, { wch: 50 }];
+    wsVisual["A1"].s = { font: { bold: true, sz: 16 } };
+    XLSX.utils.book_append_sheet(wb, wsVisual, "Dashboard Visual");
 
-    // --- Data Sheets ---
-    const createSheetWithAutosize = (data: any[], sheetName: string) => {
+    const createSheet = (data: any[], sheetName: string) => {
         if (data.length === 0) return;
         const ws = XLSX.utils.json_to_sheet(data);
         const colWidths = Object.keys(data[0] || {}).map(key => ({
@@ -241,63 +294,84 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
     };
 
-    createSheetWithAutosize(nationalityData, "Nacionalidades");
-    createSheetWithAutosize(visitReasonData, "Motivos de Visita");
-    createSheetWithAutosize(lengthOfStayData, "Duração da Estadia");
+    createSheet(nationalityData, "Nacionalidades");
+    createSheet(visitReasonData, "Motivos de Visita");
+    createSheet(lengthOfStayData, "Duração da Estadia");
 
     XLSX.writeFile(wb, `${getFilename()}.xlsx`);
+    setIsExporting(false);
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (filteredInteractions.length === 0) {
         alert("Não há dados para exportar.");
         return;
     }
-    
+    setIsExporting(true);
+
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    let yPos = 22;
+    const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+    let yPos = 20;
+    const pageMargin = 15;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const contentWidth = pageWidth - (pageMargin * 2);
 
     doc.setFontSize(18);
-    doc.text("Relatório de Atendimentos Turísticos", 14, yPos);
+    doc.text("Relatório de Atendimentos Turísticos", pageMargin, yPos);
     yPos += 10;
     
     doc.setFontSize(11);
     doc.setTextColor(100);
-    doc.text(`Período: ${periodLabels[period]}`, 14, yPos);
-    yPos += 6;
-    doc.text(`Colaborador: ${selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name}`, 14, yPos);
+    doc.text(`Período: ${periodLabels[period]}`, pageMargin, yPos);
+    doc.text(`Colaborador: ${selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name}`, pageWidth / 2, yPos);
     yPos += 10;
 
-    // KPIs Table
     doc.autoTable({
         startY: yPos,
-        head: [['Indicadores Chave (KPIs)']],
-        body: [
-            [`Total de Visitantes: ${kpis.totalVisitors}`],
-            [`Total de Atendimentos: ${kpis.totalInteractions}`],
-            [`Média por Grupo: ${kpis.averageGroupSize}`],
-            [`Nacionalidade Top: ${kpis.topNationality}`],
-        ],
-        theme: 'grid',
-        headStyles: { fillColor: [59, 130, 246] }
+        head: [['KPIs', `Visitantes: ${kpis.totalVisitors}`, `Atendimentos: ${kpis.totalInteractions}`, `Média: ${kpis.averageGroupSize}`, `Top: ${kpis.topNationality}`]],
+        theme: 'grid', headStyles: { fillColor: [59, 130, 246] }
     });
-    yPos = doc.autoTable.previous.finalY + 15;
+    yPos = doc.autoTable.previous.finalY + 12;
 
-    // Data Tables
+    const chartIds = ['map-chart', 'trend-chart', 'pie-chart', 'nationality-chart', 'reason-chart', 'stay-chart'];
+    const chartTitles = ['Top Nacionalidades no Mapa', 'Tendência de Visitantes', 'Distribuição de Nacionalidades', 'Visitantes por Nacionalidade', 'Top Motivos de Visita', 'Top Duração da Estadia'];
+
+    for (let i = 0; i < chartIds.length; i++) {
+        const imgData = await getChartAsImage(chartIds[i]);
+        if (imgData) {
+            const imgProps = doc.getImageProperties(imgData);
+            const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+
+            if (yPos + imgHeight + 15 > doc.internal.pageSize.getHeight()) {
+                doc.addPage();
+                yPos = 20;
+            }
+
+            doc.setFontSize(14);
+            doc.text(chartTitles[i], pageMargin, yPos);
+            yPos += 6;
+            doc.addImage(imgData, 'PNG', pageMargin, yPos, contentWidth, imgHeight, '', 'FAST');
+            yPos += imgHeight + 12;
+        }
+    }
+    
     const addDataToPdf = (title: string, data: any[]) => {
         if (data.length > 0) {
+            if (yPos + 20 > doc.internal.pageSize.getHeight()) {
+                doc.addPage();
+                yPos = 20;
+            }
             doc.setFontSize(14);
-            doc.text(title, 14, yPos);
+            doc.text(title, pageMargin, yPos);
             yPos += 8;
             doc.autoTable({
                 startY: yPos,
                 head: [Object.keys(data[0])],
                 body: data.map(row => Object.values(row)),
-                theme: 'striped',
-                headStyles: { fillColor: [45, 55, 72] }
+                theme: 'striped', headStyles: { fillColor: [45, 55, 72] },
+                didDrawPage: (data: any) => { yPos = data.cursor.y + 15; }
             });
-            yPos = doc.autoTable.previous.finalY + 15;
+             yPos = doc.autoTable.previous.finalY + 15;
         }
     };
     
@@ -306,13 +380,13 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     addDataToPdf("Top Duração da Estadia", lengthOfStayData);
 
     doc.save(`${getFilename()}.pdf`);
+    setIsExporting(false);
   };
 
   const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280'];
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header and Filters */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-3xl font-bold text-slate-800">Relatórios</h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -325,14 +399,13 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                     <option value="all">Todos</option>
                     {collaborators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-                {/* Outros filtros aqui */}
-                <button onClick={handleExportXLSX} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors">
+                <button onClick={handleExportXLSX} disabled={isExporting} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors disabled:bg-slate-200 disabled:cursor-not-allowed">
                     <FileSpreadsheetIcon className="w-5 h-5 text-green-600" />
-                    <span className="hidden sm:inline">XLSX</span>
+                    <span className="hidden sm:inline">{isExporting ? 'A gerar...' : 'XLSX'}</span>
                 </button>
-                <button onClick={handleExportPDF} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors">
+                <button onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors disabled:bg-slate-200 disabled:cursor-not-allowed">
                     <FileTextIcon className="w-5 h-5 text-red-600" />
-                    <span className="hidden sm:inline">PDF</span>
+                    <span className="hidden sm:inline">{isExporting ? 'A gerar...' : 'PDF'}</span>
                 </button>
             </div>
         </div>
@@ -346,8 +419,13 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                 <KpiCard title="Nacionalidade Top" value={kpis.topNationality} icon={<GlobeIcon className="w-6 h-6"/>}/>
             </div>
 
+            <div id="map-chart" className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                <h3 className="text-lg font-semibold text-slate-700 mb-4 flex items-center"><MapIcon className="w-5 h-5 mr-2 text-blue-600" /> Top 10 Nacionalidades no Mapa</h3>
+                <WorldMapChart data={mapData} />
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                <div className="lg:col-span-3 bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                <div id="trend-chart" className="lg:col-span-3 bg-white p-6 rounded-xl shadow-md border border-slate-200">
                      <h3 className="text-lg font-semibold text-slate-700 mb-4">Tendência de Visitantes</h3>
                      <ResponsiveContainer width="100%" height={300}>
                         <LineChart data={trendData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
@@ -359,7 +437,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
-                <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                <div id="pie-chart" className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md border border-slate-200">
                     <h3 className="text-lg font-semibold text-slate-700 mb-4">Distribuição de Nacionalidades</h3>
                      <ResponsiveContainer width="100%" height={300}>
                         <PieChart>
@@ -373,7 +451,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                 </div>
             </div>
 
-            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <div id="nationality-chart" className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
                 <h3 className="text-lg font-semibold text-slate-700 mb-4">Visitantes por Nacionalidade</h3>
                 <ResponsiveContainer width="100%" height={nationalityChartHeight}>
                     <BarChart layout="vertical" data={nationalityData.map(d => ({ name: d.Nacionalidade, visitantes: d.Visitantes }))} margin={{ top: 5, right: 30, left: 50, bottom: 20 }}>
@@ -390,7 +468,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
             <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
                 <h2 className="text-2xl font-bold text-slate-800 mb-6 text-center">Análise do Perfil do Visitante</h2>
                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                    <div>
+                    <div id="reason-chart">
                         <h3 className="text-lg font-semibold text-slate-700 mb-4 text-center">Top Motivos de Visita</h3>
                         {visitReasonData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={300}>
@@ -404,7 +482,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                         </ResponsiveContainer>
                         ): ( <p className="text-center text-slate-500 py-10">Sem dados de motivo da visita.</p>) }
                     </div>
-                    <div>
+                    <div id="stay-chart">
                         <h3 className="text-lg font-semibold text-slate-700 mb-4 text-center">Top Duração da Estadia</h3>
                         {lengthOfStayData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={300}>
@@ -420,7 +498,6 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                     </div>
                 </div>
             </div>
-
         </div>
         ) : (
             <div className="text-center py-20 text-slate-500 bg-white rounded-xl shadow-md border border-slate-200">
