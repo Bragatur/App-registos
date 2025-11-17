@@ -233,7 +233,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, addCollaborator, requestPassword
                     <div className="space-y-4 text-center">
                         <h2 className="text-2xl font-bold text-slate-800 mb-4 flex items-center justify-center"><MailIcon className="w-6 h-6 mr-3 text-blue-600"/> Pedido de Informações</h2>
                         <p className="text-slate-600">Para questões, recuperação de conta manual ou outros assuntos, por favor clique no botão abaixo para contactar o administrador.</p>
-                        <a href={`mailto:admin@test.com?subject=${encodeURIComponent('Pedido de apoio app Registo de Atendimentos Turísticos')}`} className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">
+                        <a href={`mailto:turismobraga@protonmail.com?subject=${encodeURIComponent('Pedido de apoio app Registo de Atendimentos Turísticos')}`} className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">
                             Contactar Administrador
                         </a>
                     </div>

@@ -106,7 +106,7 @@ const App: React.FC = () => {
   
   useEffect(() => {
     const ADMIN_USERNAME = 'admin';
-    const ADMIN_EMAIL = 'admin@test.com';
+    const ADMIN_EMAIL = 'turismobraga@protonmail.com';
 
     setCollaborators(prev => {
       let updatedCollaborators = [...prev];
@@ -218,7 +218,7 @@ const App: React.FC = () => {
     setCollaborators(prev => [...prev, newCollaborator]);
     showNotification('Registo efetuado. Aguarde aprovação de um administrador.', 'success');
 
-    // const recipient = 'admin@test.com';
+    // const recipient = 'turismobraga@protonmail.com';
     // const subject = 'Novo Pedido de Aprovação de Registo';
     // const body = `Um novo utilizador registou-se e aguarda aprovação.\n\nNome: ${newCollaborator.name}\nEmail: ${newCollaborator.email}\n\nPor favor, aceda ao painel de administração para aprovar ou recusar o registo.`;
     
