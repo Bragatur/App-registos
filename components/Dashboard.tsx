@@ -20,6 +20,7 @@ const InteractionRow: React.FC<{
     const [count, setCount] = useState(interaction.count || 1);
     const [visitReason, setVisitReason] = useState(interaction.visitReason || '');
     const [lengthOfStay, setLengthOfStay] = useState(interaction.lengthOfStay || '');
+    const [timestamp, setTimestamp] = useState(interaction.timestamp);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -33,9 +34,18 @@ const InteractionRow: React.FC<{
         setCount(interaction.count || 1);
         setVisitReason(interaction.visitReason || '');
         setLengthOfStay(interaction.lengthOfStay || '');
+        setTimestamp(interaction.timestamp);
         setIsEditing(false);
     }
     
+    const formatForInput = (isoString: string) => {
+        if (!isoString) return '';
+        const date = new Date(isoString);
+        const timezoneOffset = date.getTimezoneOffset() * 60000;
+        const localDate = new Date(date.getTime() - timezoneOffset);
+        return localDate.toISOString().slice(0, 16);
+    };
+
     const handleSave = () => {
         const reasonTrimmed = visitReason.trim();
         const stayTrimmed = lengthOfStay.trim();
@@ -45,7 +55,8 @@ const InteractionRow: React.FC<{
             nationality.trim() !== interaction.nationality ||
             interactionCount !== (interaction.count || 1) ||
             reasonTrimmed !== (interaction.visitReason || '') ||
-            stayTrimmed !== (interaction.lengthOfStay || '')
+            stayTrimmed !== (interaction.lengthOfStay || '') ||
+            timestamp !== interaction.timestamp
         )) {
             onUpdate({ 
                 ...interaction, 
@@ -53,6 +64,7 @@ const InteractionRow: React.FC<{
                 count: interactionCount,
                 visitReason: reasonTrimmed || undefined,
                 lengthOfStay: stayTrimmed || undefined,
+                timestamp: timestamp,
             });
         }
         setIsEditing(false);
@@ -70,15 +82,15 @@ const InteractionRow: React.FC<{
         return (
             <tr className="border-b border-slate-200 bg-blue-50">
                 <td className="py-3 px-4 align-top" colSpan={3}>
-                    <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                            <input
+                    <div className="flex flex-col gap-3">
+                        <div className="grid grid-cols-3 gap-2">
+                             <input
                                 type="number"
                                 value={count}
                                 onChange={(e) => setCount(parseInt(e.target.value, 10) || 1)}
                                 onKeyDown={handleKeyDown}
                                 min="1"
-                                className="w-20 px-2 py-1 border border-blue-400 rounded-md font-semibold"
+                                className="col-span-1 px-2 py-1 border border-blue-400 rounded-md font-semibold"
                             />
                             <input
                                 ref={inputRef}
@@ -87,7 +99,7 @@ const InteractionRow: React.FC<{
                                 onChange={(e) => setNationality(e.target.value)}
                                 onKeyDown={handleKeyDown}
                                 list="nationalities-all-edit"
-                                className="flex-grow px-2 py-1 border border-blue-400 rounded-md font-semibold"
+                                className="col-span-2 px-2 py-1 border border-blue-400 rounded-md font-semibold"
                             />
                         </div>
                          <input
@@ -106,6 +118,16 @@ const InteractionRow: React.FC<{
                             placeholder="Tempo de estadia (opcional)"
                             className="w-full px-2 py-1 border border-slate-300 rounded-md"
                         />
+                        <div>
+                            <label className="text-xs font-medium text-slate-600">Data do Atendimento</label>
+                            <input
+                                type="datetime-local"
+                                value={formatForInput(timestamp)}
+                                onChange={(e) => setTimestamp(new Date(e.target.value).toISOString())}
+                                onKeyDown={handleKeyDown}
+                                className="w-full px-2 py-1 border border-slate-300 rounded-md text-sm"
+                            />
+                        </div>
                     </div>
                 </td>
                 <td className="py-3 px-4 align-middle">

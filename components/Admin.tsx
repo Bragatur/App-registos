@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef } from 'react';
 import { Collaborator, PRIMARY_ADMIN_ID } from '../types';
 import { UsersIcon, CheckCircleIcon, XCircleIcon, CogIcon, ShieldCheckIcon, TrashIcon, RotateCcwIcon, AlertTriangleIcon } from './icons';
@@ -217,6 +216,7 @@ interface AdminProps {
   onToggleAdmin: (id: string) => void;
   onResetInteractions: (id: string) => void;
   onUpdateProfile: (id: string, newName: string, newEmail: string, newPass: string) => void;
+  onClearAllInteractions: () => void;
 }
 
 const Admin: React.FC<AdminProps> = ({ 
@@ -228,8 +228,15 @@ const Admin: React.FC<AdminProps> = ({
   onToggleAdmin,
   onResetInteractions,
   onUpdateProfile, 
+  onClearAllInteractions,
 }) => {
   const [managingUser, setManagingUser] = useState<Collaborator | null>(null);
+  const [globalConfirmation, setGlobalConfirmation] = useState<{
+    message: string;
+    onConfirm: () => void;
+    confirmText: string;
+    confirmClass: string;
+  } | null>(null);
 
   const pendingCollaborators = collaborators.filter(c => c.status === 'pendente');
   const approvedCollaborators = collaborators.filter(c => c.status === 'aprovado');
@@ -240,8 +247,43 @@ const Admin: React.FC<AdminProps> = ({
     }
   };
 
+  const handleClearAllInteractions = () => {
+    setGlobalConfirmation({
+      message: 'Tem a certeza que deseja eliminar PERMANENTEMENTE TODOS os registos de atendimento de TODOS os utilizadores? Esta ação é irreversível.',
+      onConfirm: () => {
+        onClearAllInteractions();
+        setGlobalConfirmation(null);
+      },
+      confirmText: 'Sim, Eliminar Tudo',
+      confirmClass: 'bg-red-600 hover:bg-red-700'
+    });
+  };
+
   return (
     <>
+      {globalConfirmation && (
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-[60] p-4" onClick={() => setGlobalConfirmation(null)}>
+            <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-xl font-bold text-slate-800 flex items-center">
+                    <AlertTriangleIcon className="w-6 h-6 mr-3 text-red-500"/>
+                    Confirmação Necessária
+                </h3>
+                <p className="text-slate-600">{globalConfirmation.message}</p>
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                    <button onClick={() => setGlobalConfirmation(null)} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-4 py-2 rounded-lg">
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={globalConfirmation.onConfirm}
+                        className={`text-white font-semibold px-4 py-2 rounded-lg ${globalConfirmation.confirmClass}`}
+                    >
+                        {globalConfirmation.confirmText}
+                    </button>
+                </div>
+            </div>
+          </div>
+      )}
+
       <div className="max-w-4xl mx-auto space-y-8">
         <h2 className="text-3xl font-bold text-slate-800">Painel de Administração</h2>
 
@@ -306,6 +348,21 @@ const Admin: React.FC<AdminProps> = ({
               </li>
             ))}
           </ul>
+        </div>
+        
+        <div className="bg-red-50 border-t-4 border-red-400 p-6 rounded-lg shadow-md">
+            <h3 className="text-xl font-bold mb-4 text-red-800 flex items-center">
+                <AlertTriangleIcon className="w-6 h-6 mr-3"/>
+                Zona de Perigo Global
+            </h3>
+            <p className="text-red-700 mb-4">A ação abaixo afetará toda a aplicação e não pode ser desfeita. Irá eliminar permanentemente todos os registos de atendimento de todos os utilizadores.</p>
+            <button
+                onClick={handleClearAllInteractions}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
+            >
+                <TrashIcon className="w-5 h-5 mr-2"/>
+                Eliminar TODOS os Registos de Atendimento
+            </button>
         </div>
       </div>
 

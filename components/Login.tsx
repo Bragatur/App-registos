@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Collaborator } from '../types';
+import { Collaborator, PRIMARY_ADMIN_ID } from '../types';
 import { UserPlusIcon, LogInIcon, MailIcon } from './icons';
 
 interface PasswordRecoveryModalProps {
@@ -95,7 +95,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, addCollaborator, requestPassword
         }
     };
     
-    const approvedCollaborators = collaborators.filter(c => c.status === 'aprovado');
+    const approvedCollaborators = collaborators.filter(c => c.status === 'aprovado' && c.id !== PRIMARY_ADMIN_ID);
     
     const getInitials = (name: string): string => {
         if (!name) return '?';
@@ -193,34 +193,39 @@ const Login: React.FC<LoginProps> = ({ onLogin, addCollaborator, requestPassword
                     </div>
 
                     {/* RIGHT COLUMN: APPROVED USERS */}
-                     {approvedCollaborators.length > 0 && (
-                      <div className="bg-white p-8 rounded-xl shadow-md border border-slate-200">
-                        <h3 className="text-2xl font-bold text-slate-800 mb-6 text-center">Acesso Rápido</h3>
-                        <div className="flex flex-wrap gap-x-6 gap-y-8 justify-center">
-                          {approvedCollaborators.map(c => (
-                            <button
-                              key={c.id}
-                              onClick={() => { setName(c.name); setPassword(''); passwordInputRef.current?.focus(); }}
-                              className="flex flex-col items-center gap-2 text-center group w-28 transform transition-transform duration-200 hover:-translate-y-1"
-                              title={`Iniciar sessão como ${c.name}`}
-                            >
-                              <div 
-                                className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-2xl transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg"
-                                style={{ backgroundColor: `#${nameToColor(c.name)}` }}
+                    <div className="bg-white p-8 rounded-xl shadow-md border border-slate-200">
+                      <h3 className="text-2xl font-bold text-slate-800 mb-6 text-center">Acesso Rápido</h3>
+                      {approvedCollaborators.length > 0 ? (
+                          <div className="flex flex-wrap gap-x-6 gap-y-8 justify-center">
+                            {approvedCollaborators.map(c => (
+                              <button
+                                key={c.id}
+                                onClick={() => { setName(c.name); setPassword(''); passwordInputRef.current?.focus(); }}
+                                className="flex flex-col items-center gap-2 text-center group w-28 transform transition-transform duration-200 hover:-translate-y-1"
+                                title={`Iniciar sessão como ${c.name}`}
                               >
-                                {getInitials(c.name)}
-                              </div>
-                              <div className="flex flex-col items-center">
-                                <span className="font-semibold text-sm text-slate-700 group-hover:text-blue-600 break-words w-full">{c.name}</span>
-                                {c.isAdmin && (
-                                  <span className="text-xs font-bold text-white bg-blue-600 px-2 py-0.5 rounded-full mt-1">Admin</span>
-                                )}
-                              </div>
-                            </button>
-                          ))}
+                                <div 
+                                  className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-2xl transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg"
+                                  style={{ backgroundColor: `#${nameToColor(c.name)}` }}
+                                >
+                                  {getInitials(c.name)}
+                                </div>
+                                <div className="flex flex-col items-center">
+                                  <span className="font-semibold text-sm text-slate-700 group-hover:text-blue-600 break-words w-full">{c.name}</span>
+                                  {c.isAdmin && (
+                                    <span className="text-xs font-bold text-white bg-blue-600 px-2 py-0.5 rounded-full mt-1">Admin</span>
+                                  )}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                      ) : (
+                        <div className="text-center py-8 text-slate-500">
+                          <p>Nenhum utilizador aprovado ainda.</p>
+                          <p className="text-sm mt-1">Os novos registos aparecerão aqui após aprovação de um administrador.</p>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                 </div>
 
                 {/* BOTTOM ROW: INFORMATION */}

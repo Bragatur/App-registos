@@ -137,6 +137,21 @@ const App: React.FC = () => {
       return updatedCollaborators;
     });
   }, [setCollaborators]);
+  
+  useEffect(() => {
+    // Data migration: ensure all interactions have a createdAt field
+    setInteractions(prev => {
+        const needsMigration = prev.some(i => !i.createdAt);
+        if (needsMigration) {
+            console.log("Running migration for `createdAt` field...");
+            return prev.map(i => ({
+                ...i,
+                createdAt: i.createdAt || i.timestamp // Fallback to timestamp for old records
+            }));
+        }
+        return prev;
+    });
+  }, [setInteractions]);
 
   useEffect(() => {
     const collaboratorIds = new Set(collaborators.map(c => c.id));
@@ -347,12 +362,14 @@ const App: React.FC = () => {
 
   const addInteraction = (nationality: string, count: number, visitReason?: string, lengthOfStay?: string): string => {
     if (!currentCollaborator) return '';
+    const now = new Date().toISOString();
     const newInteraction: Interaction = {
       id: `int_${Date.now()}_${Math.random().toString(36).slice(2)}`,
       collaboratorId: currentCollaborator.id,
       nationality,
       count,
-      timestamp: new Date().toISOString(),
+      timestamp: now, // Data do evento, pode ser editada posteriormente
+      createdAt: now,   // Data da criação, não deve ser alterada
       visitReason: visitReason && visitReason.trim() ? visitReason.trim() : undefined,
       lengthOfStay: lengthOfStay && lengthOfStay.trim() ? lengthOfStay.trim() : undefined,
     };
@@ -381,6 +398,11 @@ const App: React.FC = () => {
     if (user) {
         showNotification(`Todos os registos de "${user.name}" foram eliminados.`, 'success');
     }
+  };
+
+  const clearAllInteractions = () => {
+    setInteractions([]);
+    showNotification('Todos os registos de atendimentos foram eliminados com sucesso.', 'success');
   };
   
   const renderContent = () => {
@@ -418,6 +440,7 @@ const App: React.FC = () => {
             onToggleAdmin={toggleAdminStatus}
             onResetInteractions={resetCollaboratorInteractions}
             onUpdateProfile={updateCollaboratorProfile}
+            onClearAllInteractions={clearAllInteractions}
           />
         );
       default:

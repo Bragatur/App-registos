@@ -14,7 +14,10 @@ export interface Interaction {
   id: string;
   collaboratorId: string;
   nationality: string;
+  /** Data e hora do evento, pode ser editada. */
   timestamp: string;
+  /** Data e hora da criação do registo, imutável. */
+  createdAt: string;
   count: number;
   visitReason?: string;
   lengthOfStay?: string;

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Interaction, Collaborator, ReportPeriod } from '../types';
+import { Interaction, Collaborator, ReportPeriod, PRIMARY_ADMIN_ID } from '../types';
 import { ALL_NATIONALITIES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, MapIcon, EditIcon, BookOpenIcon, ClockIcon } from './icons';
@@ -82,6 +82,15 @@ const EditInteractionModal: React.FC<EditInteractionModalProps> = ({ interaction
     const [count, setCount] = useState(interaction.count || 1);
     const [visitReason, setVisitReason] = useState(interaction.visitReason || '');
     const [lengthOfStay, setLengthOfStay] = useState(interaction.lengthOfStay || '');
+    const [timestamp, setTimestamp] = useState(interaction.timestamp);
+
+    const formatForInput = (isoString: string) => {
+        if (!isoString) return '';
+        const date = new Date(isoString);
+        const timezoneOffset = date.getTimezoneOffset() * 60000;
+        const localDate = new Date(date.getTime() - timezoneOffset);
+        return localDate.toISOString().slice(0, 16);
+    };
 
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
@@ -95,6 +104,7 @@ const EditInteractionModal: React.FC<EditInteractionModalProps> = ({ interaction
             count: interactionCount,
             visitReason: reasonTrimmed || undefined,
             lengthOfStay: stayTrimmed || undefined,
+            timestamp: timestamp,
         });
     };
     
@@ -121,6 +131,17 @@ const EditInteractionModal: React.FC<EditInteractionModalProps> = ({ interaction
                      <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="edit-lengthOfStay">Tempo de Estadia (Opcional)</label>
                         <input id="edit-lengthOfStay" type="text" value={lengthOfStay} onChange={(e) => setLengthOfStay(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                    </div>
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="edit-timestamp">Data e Hora do Atendimento</label>
+                        <input
+                            id="edit-timestamp"
+                            type="datetime-local"
+                            value={formatForInput(timestamp)}
+                            onChange={(e) => setTimestamp(new Date(e.target.value).toISOString())}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                            required
+                        />
                     </div>
                     <div className="flex justify-end gap-3 pt-2">
                         <button type="button" onClick={onClose} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-4 py-2 rounded-lg">Cancelar</button>
@@ -172,6 +193,10 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
   };
 
   const filteredInteractions = useMemo(() => {
+    const interactionsWithoutAdmin = allInteractions.filter(
+        interaction => interaction.collaboratorId !== PRIMARY_ADMIN_ID
+    );
+
     const now = new Date();
     let startDate = new Date();
     now.setHours(23, 59, 59, 999);
@@ -193,7 +218,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
         break;
     }
     
-    return allInteractions
+    return interactionsWithoutAdmin
         .filter(interaction => {
             const interactionDate = new Date(interaction.timestamp);
             const collaboratorMatch = selectedCollaborator === 'all' || interaction.collaboratorId === selectedCollaborator;
@@ -511,7 +536,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
                 </div>
                  <select value={selectedCollaborator} onChange={(e) => setSelectedCollaborator(e.target.value)} className="px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500">
                     <option value="all">Todos</option>
-                    {collaborators.filter(c => c.status === 'aprovado').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {collaborators.filter(c => c.status === 'aprovado' && c.id !== PRIMARY_ADMIN_ID).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 <button onClick={handleExportXLSX} disabled={isExporting} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors disabled:bg-slate-200 disabled:cursor-not-allowed">
                     <FileSpreadsheetIcon className="w-5 h-5 text-green-600" />
