@@ -44,10 +44,11 @@ const Notification: React.FC<{ notification: NotificationType | null, onDismiss:
 
 interface ChangePasswordModalProps {
   onClose: () => void;
-  onSubmit: (currentPassword: string, newPassword: string) => void;
+  onSubmit: (newPassword: string, currentPassword?: string) => void;
+  isForced: boolean;
 }
 
-const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onClose, onSubmit }) => {
+const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onClose, onSubmit, isForced }) => {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -55,29 +56,37 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onClose, onSu
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     if (!newPassword || newPassword !== confirmPassword) {
       setError('As novas passwords não coincidem ou estão em branco.');
       return;
     }
-    onSubmit(currentPassword, newPassword);
+    onSubmit(newPassword, isForced ? undefined : currentPassword);
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-start">
-          <h3 className="text-xl font-bold text-slate-800 flex items-center"><KeyIcon className="w-6 h-6 mr-3 text-blue-600" /> Alterar a sua Password</h3>
+          <h3 className="text-xl font-bold text-slate-800 flex items-center"><KeyIcon className="w-6 h-6 mr-3 text-blue-600" /> {isForced ? "Definir Nova Password" : "Alterar a sua Password"}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <p className="text-sm text-slate-600">Para sua segurança, introduza a sua password atual antes de definir uma nova.</p>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="current-password-modal">Password Atual</label>
-            <input id="current-password-modal" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" required autoFocus />
-          </div>
+          {isForced ? (
+             <p className="text-sm text-slate-600 bg-blue-50 p-3 rounded-lg border border-blue-200">Como esta é uma recuperação de conta, por favor defina uma nova password permanente para proteger a sua conta.</p>
+          ) : (
+            <>
+              <p className="text-sm text-slate-600">Para sua segurança, introduza a sua password atual antes de definir uma nova.</p>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="current-password-modal">Password Atual</label>
+                <input id="current-password-modal" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" required autoFocus />
+              </div>
+            </>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="new-password-modal">Nova Password</label>
-            <input id="new-password-modal" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" required />
+            <input id="new-password-modal" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" required autoFocus={isForced} />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="confirm-password-modal">Confirmar Nova Password</label>
@@ -286,10 +295,11 @@ const App: React.FC = () => {
     return { name: userToReset.name, newPassword };
   };
 
-  const handleChangePassword = (currentPassword: string, newPassword: string) => {
+  const handleChangePassword = (newPassword: string, currentPassword?: string) => {
     if (!currentCollaborator) return;
 
-    if (currentCollaborator.password !== currentPassword) {
+    // Only validate current password if it's not a forced reset.
+    if (!currentCollaborator.mustChangePassword && currentCollaborator.password !== currentPassword) {
         showNotification('A password atual está incorreta.', 'error');
         return;
     }
@@ -469,6 +479,7 @@ const App: React.FC = () => {
         <ChangePasswordModal 
           onClose={() => setIsChangingPassword(false)}
           onSubmit={handleChangePassword}
+          isForced={!!currentCollaborator.mustChangePassword}
         />
       )}
 

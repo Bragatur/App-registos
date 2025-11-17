@@ -1,6 +1,10 @@
 
 
 
+
+
+
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Interaction, Collaborator, ReportPeriod, PRIMARY_ADMIN_ID } from '../types';
 import { ALL_NATIONALITIES, ORDERED_NATIONALITIES_FOR_EXPORT } from '../constants';
@@ -564,7 +568,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
         head: [['KPIs', `Visitantes: ${kpis.totalVisitors}`, `Atendimentos: ${kpis.totalInteractions}`, `Média: ${kpis.averageGroupSize}`, `Top: ${kpis.topNationality}`]],
         theme: 'grid', headStyles: { fillColor: [59, 130, 246] }
     });
-    yPos = doc.autoTable.previous.finalY + 12;
+    yPos = (doc.autoTable.previous.finalY as number) + 12;
 
     const chartIds = ['map-chart', 'trend-chart', 'pie-chart', 'nationality-chart', 'reason-chart', 'stay-chart'];
     const chartTitles = ['Top Nacionalidades no Mapa', 'Tendência de Visitantes', 'Distribuição de Nacionalidades', 'Visitantes por Nacionalidade', 'Top Motivos de Visita', 'Top Duração da Estadia'];
@@ -590,7 +594,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     
     const addDataToPdf = (title: string, data: any[]) => {
         if (data.length > 0) {
-            if (yPos + 20 > doc.internal.pageSize.getHeight()) {
+            if (yPos + 20 > (doc.internal.pageSize.getHeight() as number)) {
                 doc.addPage();
                 yPos = 20;
             }
@@ -600,11 +604,17 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
             doc.autoTable({
                 startY: yPos,
                 head: [Object.keys(data[0])],
-                body: data.map(row => Object.values(row)),
+                // FIX: The `body` of `autoTable` was receiving mixed types, which can cause issues. 
+                // Convert all cell values to strings for consistent display and to avoid type errors.
+                body: data.map(row => Object.values(row).map(value => String(value ?? ''))),
                 theme: 'striped', headStyles: { fillColor: [45, 55, 72] },
-                didDrawPage: (data: any) => { yPos = data.cursor.y + 15; }
+                didDrawPage: (hookData: any) => { 
+                    // FIX: Safely update yPos for multi-page tables by casting to number.
+                    yPos = (hookData.cursor.y as number);
+                }
             });
-             yPos = doc.autoTable.previous.finalY + 15;
+            // FIX: After the table, use the reliable `finalY` property (cast to number) and add a margin.
+            yPos = (doc.autoTable.previous.finalY as number) + 15;
         }
     };
     
