@@ -2,8 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Interaction, Collaborator, ReportPeriod } from '../types';
 import { ALL_NATIONALITIES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, SparklesIcon } from './icons';
-import { GoogleGenAI } from "@google/genai";
+import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon } from './icons';
 
 // Declaração para bibliotecas globais carregadas via CDN
 declare const XLSX: any;
@@ -40,8 +39,6 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
   const [nationalityFilter, setNationalityFilter] = useState<string>('');
   const [visitReasonFilter, setVisitReasonFilter] = useState<string>('');
   const [lengthOfStayFilter, setLengthOfStayFilter] = useState<string>('');
-  const [geminiAnalysis, setGeminiAnalysis] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
 
   const uniqueVisitReasons = useMemo(() => {
     const reasons = new Set<string>();
@@ -311,49 +308,6 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
     doc.save(`${getFilename()}.pdf`);
   };
 
-  const handleGeminiAnalysis = async () => {
-    if (filteredInteractions.length === 0) {
-        alert("Não há dados para analisar. Por favor, ajuste os filtros.");
-        return;
-    }
-    setIsAnalyzing(true);
-    setGeminiAnalysis('');
-
-    const prompt = `
-        Analise os seguintes dados de interação de um posto de turismo e forneça um resumo com as principais conclusões.
-        Os dados referem-se ao período: ${periodLabels[period]}.
-        Filtros aplicados: Colaborador (${selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name}), Nacionalidade (${nationalityFilter || 'Todas'}), Motivo (${visitReasonFilter || 'Todos'}), Estadia (${lengthOfStayFilter || 'Todas'}).
-
-        KPIs:
-        - Visitantes Totais: ${kpis.totalVisitors}, Atendimentos: ${kpis.totalInteractions}, Média/Grupo: ${kpis.averageGroupSize}, Top Nacionalidade: ${kpis.topNationality}
-
-        Top 5 Nacionalidades:
-        ${nationalityData.slice(0, 5).map(d => `- ${d.Nacionalidade}: ${d.Visitantes}`).join('\n')}
-
-        Top 5 Motivos de Visita:
-        ${visitReasonData.length > 0 ? visitReasonData.slice(0, 5).map(d => `- ${d.Motivo}: ${d.Visitantes}`).join('\n') : 'Sem dados'}
-        
-        Top 5 Durações de Estadia:
-        ${lengthOfStayData.length > 0 ? lengthOfStayData.slice(0, 5).map(d => `- ${d.Duração}: ${d.Visitantes}`).join('\n') : 'Sem dados'}
-
-        Forneça a análise em Português, formatada como Markdown (use **negrito** para destacar). Foque-se em tendências, padrões e recomendações. Seja conciso.
-    `;
-    
-    try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-        });
-        setGeminiAnalysis(response.text);
-    } catch (error) {
-        console.error("Error calling Gemini API", error);
-        setGeminiAnalysis("Ocorreu um erro ao gerar a análise. Por favor, tente novamente.");
-    } finally {
-        setIsAnalyzing(false);
-    }
-  };
-
   const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280'];
 
   return (
@@ -379,10 +333,6 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                 <button onClick={handleExportPDF} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors">
                     <FileTextIcon className="w-5 h-5 text-red-600" />
                     <span className="hidden sm:inline">PDF</span>
-                </button>
-                 <button onClick={handleGeminiAnalysis} disabled={isAnalyzing} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-blue-600 text-white border border-blue-700 shadow-sm hover:bg-blue-700 transition-colors disabled:bg-blue-300">
-                    <SparklesIcon className="w-5 h-5" />
-                    <span className="hidden sm:inline">{isAnalyzing ? 'A analisar...' : 'Análise IA'}</span>
                 </button>
             </div>
         </div>
@@ -470,25 +420,6 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
                     </div>
                 </div>
             </div>
-            
-            {(isAnalyzing || geminiAnalysis) && (
-              <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-                <h3 className="text-lg font-semibold text-slate-700 mb-4 flex items-center">
-                  <SparklesIcon className="w-5 h-5 mr-2 text-blue-600" /> Análise Inteligente
-                </h3>
-                {isAnalyzing ? (
-                  <div className="flex items-center justify-center py-10">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <p className="ml-3 text-slate-600">A gerar análise com Gemini...</p>
-                  </div>
-                ) : (
-                  <div
-                    className="prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap bg-slate-50 p-4 rounded-lg"
-                    dangerouslySetInnerHTML={{ __html: geminiAnalysis.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br />') }}
-                  />
-                )}
-              </div>
-            )}
 
         </div>
         ) : (

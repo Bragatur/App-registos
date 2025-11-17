@@ -182,16 +182,6 @@ export const MailIcon: React.FC<IconProps> = (props) => (
     </svg>
 );
 
-export const SparklesIcon: React.FC<IconProps> = (props) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-        <path d="M12 3L9.5 9.5 3 12l6.5 2.5L12 21l2.5-6.5L21 12l-6.5-2.5z"></path>
-        <path d="M3 3L4.5 7.5"></path>
-        <path d="M21 21L19.5 16.5"></path>
-        <path d="M3 21L4.5 16.5"></path>
-        <path d="M21 3L19.5 7.5"></path>
-    </svg>
-);
-
 export const ArrowUpIcon: React.FC<IconProps> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
     <line x1="12" y1="19" x2="12" y2="5"></line>
