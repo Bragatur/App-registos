@@ -7,6 +7,7 @@ export interface Collaborator {
   password: string; // Adicionado para segurança
   isAdmin: boolean;
   status: 'aprovado' | 'pendente';
+  mustChangePassword?: boolean;
 }
 
 export interface Interaction {

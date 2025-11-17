@@ -1,13 +1,14 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Collaborator, Interaction } from '../types';
 import { QUICK_ACCESS_NATIONALITIES, ALL_NATIONALITIES } from '../constants';
-import { PlusIcon, EditIcon, SearchIcon, BookOpenIcon, ClockIcon, ArrowUpIcon, ArrowDownIcon } from './icons';
+import { PlusIcon, EditIcon, SearchIcon, BookOpenIcon, ClockIcon, ArrowUpIcon, ArrowDownIcon, AlertTriangleIcon } from './icons';
 
 interface DashboardProps {
   collaborator: Collaborator;
   interactions: Interaction[];
   addInteraction: (nationality: string, count: number, visitReason?: string, lengthOfStay?: string) => string;
   updateInteraction: (interaction: Interaction) => void;
+  onChangePasswordClick: () => void;
 }
 
 const InteractionRow: React.FC<{
@@ -146,7 +147,7 @@ const InteractionRow: React.FC<{
 }
 
 
-const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addInteraction, updateInteraction }) => {
+const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addInteraction, updateInteraction, onChangePasswordClick }) => {
   // Form state
   const [nationality, setNationality] = useState('');
   const [count, setCount] = useState<number | string>(1);
@@ -246,6 +247,24 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
 
   return (
     <div className="max-w-7xl mx-auto">
+      {collaborator.mustChangePassword && (
+        <div className="bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 rounded-md mb-6 flex items-center justify-between shadow-md">
+          <div className="flex items-center">
+            <AlertTriangleIcon className="w-6 h-6 mr-3 text-amber-500" />
+            <div>
+              <p className="font-bold">Ação Necessária: Altere a sua Password</p>
+              <p className="text-sm">A sua password atual é temporária. Por segurança, por favor defina uma nova password pessoal.</p>
+            </div>
+          </div>
+          <button
+            onClick={onChangePasswordClick}
+            className="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-lg transition-colors whitespace-nowrap"
+          >
+            Alterar Agora
+          </button>
+        </div>
+      )}
+
         <datalist id="nationalities-all">
             {ALL_NATIONALITIES.map(nat => <option key={nat} value={nat} />)}
         </datalist>

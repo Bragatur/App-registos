@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Collaborator } from '../types';
-import { UsersIcon, CheckCircleIcon, XCircleIcon, CogIcon } from './icons';
+
+import React, { useState, useRef } from 'react';
+import { Collaborator, PRIMARY_ADMIN_ID } from '../types';
+import { UsersIcon, CheckCircleIcon, XCircleIcon, CogIcon, ShieldCheckIcon, TrashIcon, RotateCcwIcon } from './icons';
 
 interface ManageUserModalProps {
   user: Collaborator;
@@ -8,14 +9,17 @@ interface ManageUserModalProps {
   onClose: () => void;
   onUpdateProfile: (id: string, newName: string, newPass: string) => void;
   onResetPassword: (id: string, newPass: string) => void;
+  onDelete: (id: string) => void;
+  onToggleAdmin: (id: string) => void;
+  onResetInteractions: (id: string) => void;
 }
 
-const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose, onUpdateProfile, onResetPassword }) => {
+const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose, onUpdateProfile, onResetPassword, onDelete, onToggleAdmin, onResetInteractions }) => {
   const [newName, setNewName] = useState(user.name);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-
+  
   const handlePasswordReset = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -40,6 +44,25 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
     }
     onUpdateProfile(user.id, newName, newPassword);
     onClose();
+  }
+
+  const handleDeleteUser = () => {
+    if (window.confirm(`Tem a certeza que deseja eliminar permanentemente o utilizador "${user.name}"? TODOS os seus registos serão apagados. Esta ação é irreversível.`)) {
+      onDelete(user.id);
+      onClose();
+    }
+  }
+
+  const handleToggleAdmin = () => {
+    onToggleAdmin(user.id);
+    onClose();
+  }
+  
+  const handleResetInteractions = () => {
+    if (window.confirm(`Tem a certeza que deseja eliminar TODOS os registos de atendimento de "${user.name}"? Esta ação é irreversível.`)) {
+      onResetInteractions(user.id);
+      onClose();
+    }
   }
 
   if (isSelf) {
@@ -93,6 +116,43 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
           <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors">Redefinir Password</button>
         </form>
 
+        {user.id !== PRIMARY_ADMIN_ID && (
+          <>
+            <div className="space-y-3 border-t pt-4">
+              <h4 className="font-semibold text-slate-700">Permissões</h4>
+              <div className="flex items-center justify-between">
+                <p>Estatuto: <span className={`font-bold ${user.isAdmin ? 'text-blue-600' : 'text-slate-600'}`}>{user.isAdmin ? 'Administrador' : 'Utilizador'}</span></p>
+                <button 
+                  onClick={handleToggleAdmin}
+                  className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-4 py-2 rounded-lg transition-colors"
+                >
+                  <ShieldCheckIcon className="w-5 h-5" />
+                  {user.isAdmin ? 'Remover Admin' : 'Promover a Admin'}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t border-red-300 pt-4 bg-red-50 p-4 rounded-lg">
+              <h4 className="font-semibold text-red-800">Zona de Perigo</h4>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={handleResetInteractions}
+                  className="flex-1 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                >
+                  <RotateCcwIcon className="w-5 h-5"/> Eliminar Registos
+                </button>
+                <button
+                  onClick={handleDeleteUser}
+                  className="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                >
+                 <TrashIcon className="w-5 h-5" /> Eliminar Utilizador
+                </button>
+              </div>
+              <p className="text-xs text-red-600 mt-2">Estas ações são irreversíveis.</p>
+            </div>
+          </>
+        )}
+        
         <div className="text-right border-t pt-4">
           <button onClick={onClose} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-4 py-2 rounded-lg transition-colors">Fechar</button>
         </div>
@@ -107,11 +167,24 @@ interface AdminProps {
   currentAdminId: string;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
+  onDelete: (id: string) => void;
+  onToggleAdmin: (id: string) => void;
+  onResetInteractions: (id: string) => void;
   onResetPassword: (id: string, newPass: string) => void;
   onUpdateProfile: (id: string, newName: string, newPass: string) => void;
 }
 
-const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove, onReject, onResetPassword, onUpdateProfile }) => {
+const Admin: React.FC<AdminProps> = ({ 
+  collaborators, 
+  currentAdminId, 
+  onApprove, 
+  onReject, 
+  onDelete,
+  onToggleAdmin,
+  onResetInteractions,
+  onResetPassword, 
+  onUpdateProfile, 
+}) => {
   const [managingUser, setManagingUser] = useState<Collaborator | null>(null);
 
   const pendingCollaborators = collaborators.filter(c => c.status === 'pendente');
@@ -161,7 +234,7 @@ const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove,
             <p className="text-slate-500">Não há registos pendentes de aprovação.</p>
           )}
         </div>
-
+        
         <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
           <h3 className="text-xl font-bold mb-4 text-slate-800 flex items-center">
               <UsersIcon className="w-6 h-6 mr-3 text-blue-600"/>
@@ -199,6 +272,9 @@ const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove,
           onClose={() => setManagingUser(null)}
           onResetPassword={onResetPassword}
           onUpdateProfile={onUpdateProfile}
+          onDelete={onDelete}
+          onToggleAdmin={onToggleAdmin}
+          onResetInteractions={onResetInteractions}
         />
       )}
     </>

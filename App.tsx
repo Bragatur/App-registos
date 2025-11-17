@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Collaborator, Interaction, View, PRIMARY_ADMIN_ID, Notification as NotificationType } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
@@ -6,7 +7,7 @@ import Dashboard from './components/Dashboard';
 import Reports from './components/Reports';
 import Header from './components/Header';
 import Admin from './components/Admin';
-import { CheckCircleIcon, XCircleIcon } from './components/icons';
+import { CheckCircleIcon, XCircleIcon, KeyIcon } from './components/icons';
 
 const Notification: React.FC<{ notification: NotificationType | null, onDismiss: () => void }> = ({ notification, onDismiss }) => {
     if (!notification) return null;
@@ -40,6 +41,50 @@ const Notification: React.FC<{ notification: NotificationType | null, onDismiss:
     );
 };
 
+interface ChangePasswordModalProps {
+  onClose: () => void;
+  onSubmit: (newPassword: string) => void;
+}
+
+const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onClose, onSubmit }) => {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword || newPassword !== confirmPassword) {
+      setError('As passwords não coincidem ou estão em branco.');
+      return;
+    }
+    onSubmit(newPassword);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-start">
+          <h3 className="text-xl font-bold text-slate-800 flex items-center"><KeyIcon className="w-6 h-6 mr-3 text-blue-600" /> Alterar a sua Password</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <p className="text-sm text-slate-600">Por segurança, defina uma nova password pessoal para a sua conta.</p>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="new-password-modal">Nova Password</label>
+            <input id="new-password-modal" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" required autoFocus />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="confirm-password-modal">Confirmar Nova Password</label>
+            <input id="confirm-password-modal" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" required />
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg">Guardar Nova Password</button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 
 const App: React.FC = () => {
   const [collaborators, setCollaborators] = useLocalStorage<Collaborator[]>('tourist_app_collaborators', []);
@@ -47,6 +92,7 @@ const App: React.FC = () => {
   const [currentCollaborator, setCurrentCollaborator] = useState<Collaborator | null>(null);
   const [currentView, setCurrentView] = useState<View>('login');
   const [notification, setNotification] = useState<NotificationType | null>(null);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const showNotification = (message: string, type: 'success' | 'error', undoAction?: () => void) => {
     setNotification({ message, type, undoAction });
@@ -150,13 +196,30 @@ const App: React.FC = () => {
     };
     setCollaborators(prev => [...prev, newCollaborator]);
     showNotification('Registo efetuado. Aguarde aprovação de um administrador.', 'success');
+
+    const recipient = 'braga.turismo.2024@gmail.com';
+    const subject = 'Novo Pedido de Aprovação de Registo';
+    const body = `Um novo utilizador registou-se e aguarda aprovação.\n\nNome: ${newCollaborator.name}\nEmail: ${newCollaborator.email}\n\nPor favor, aceda ao painel de administração para aprovar ou recusar o registo.`;
+    
+    window.open(`mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
   };
 
   const approveCollaborator = (id: string) => {
+    const collaboratorToApprove = collaborators.find(c => c.id === id);
+    if (!collaboratorToApprove) return;
+
     setCollaborators(prev =>
       prev.map(c => (c.id === id ? { ...c, status: 'aprovado' } : c))
     );
     showNotification("Utilizador aprovado com sucesso.", "success");
+    
+    const recipient = collaboratorToApprove.email;
+    const subject = 'O seu registo na App Atendimentos foi aprovado!';
+    const body = `Olá ${collaboratorToApprove.name},\n\nO seu registo na aplicação de Atendimentos Turísticos foi aprovado.\n\nJá pode iniciar sessão com as suas credenciais.\n\nCom os melhores cumprimentos,\nA Equipa do Posto de Turismo`;
+
+    if (window.confirm(`Deseja notificar "${collaboratorToApprove.name}" (${recipient}) por email sobre a aprovação?`)) {
+        window.open(`mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+    }
   };
 
   const rejectCollaborator = (id: string) => {
@@ -182,7 +245,8 @@ const App: React.FC = () => {
     }
     
     setCollaborators(prev => prev.filter(c => c.id !== id));
-    showNotification(`Utilizador "${targetUser.name}" eliminado com sucesso.`, 'success');
+    setInteractions(prev => prev.filter(i => i.collaboratorId !== id));
+    showNotification(`Utilizador "${targetUser.name}" e todos os seus registos foram eliminados.`, 'success');
   };
 
   const resetUserPassword = (userId: string, newPassword: string) => {
@@ -192,19 +256,38 @@ const App: React.FC = () => {
     showNotification('Password redefinida com sucesso.', 'success');
   };
   
-  const requestPasswordReset = (email: string) => {
+  const requestPasswordReset = (email: string): { name: string; newPassword: string } | null => {
     const userToReset = collaborators.find(c => c.email.toLowerCase() === email.toLowerCase());
     if (!userToReset) {
       showNotification("Não foi encontrada nenhuma conta com este email.", "error");
-      return;
+      return null;
     }
     
     const newPassword = Math.random().toString(36).slice(-8);
     setCollaborators(prev =>
-      prev.map(c => (c.id === userToReset.id ? { ...c, password: newPassword } : c))
+      prev.map(c => (c.id === userToReset.id ? { ...c, password: newPassword, mustChangePassword: true } : c))
     );
 
-    showNotification(`Nova password para ${userToReset.name}: ${newPassword}`, 'success');
+    showNotification(`Password para "${userToReset.name}" redefinida. Inicie sessão com a nova password.`, 'success');
+    return { name: userToReset.name, newPassword };
+  };
+
+  const handleChangePassword = (newPassword: string) => {
+    if (!currentCollaborator) return;
+
+    const updatedCollaborator: Collaborator = {
+      ...currentCollaborator,
+      password: newPassword,
+      mustChangePassword: false,
+    };
+
+    setCollaborators(prev =>
+      prev.map(c => (c.id === currentCollaborator.id ? updatedCollaborator : c))
+    );
+
+    setCurrentCollaborator(updatedCollaborator);
+    setIsChangingPassword(false);
+    showNotification('A sua password foi alterada com sucesso.', 'success');
   };
 
   const toggleAdminStatus = (userId: string) => {
@@ -292,7 +375,7 @@ const App: React.FC = () => {
         showNotification(`Todos os registos de "${user.name}" foram eliminados.`, 'success');
     }
   };
-
+  
   const renderContent = () => {
     if (!currentCollaborator || currentView === 'login') {
       return <Login onLogin={handleLogin} addCollaborator={addCollaborator} requestPasswordReset={requestPasswordReset} collaborators={collaborators}/>;
@@ -306,6 +389,7 @@ const App: React.FC = () => {
             interactions={interactions.filter(i => i.collaboratorId === currentCollaborator.id)}
             addInteraction={addInteraction}
             updateInteraction={updateInteraction}
+            onChangePasswordClick={() => setIsChangingPassword(true)}
           />
         );
       case 'reports':
@@ -317,6 +401,9 @@ const App: React.FC = () => {
             currentAdminId={currentCollaborator.id}
             onApprove={approveCollaborator}
             onReject={rejectCollaborator}
+            onDelete={deleteCollaborator}
+            onToggleAdmin={toggleAdminStatus}
+            onResetInteractions={resetCollaboratorInteractions}
             onResetPassword={resetUserPassword}
             onUpdateProfile={updateCollaboratorProfile}
           />
@@ -329,6 +416,14 @@ const App: React.FC = () => {
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800 font-sans">
       <Notification notification={notification} onDismiss={() => setNotification(null)} />
+      
+      {isChangingPassword && currentCollaborator && (
+        <ChangePasswordModal 
+          onClose={() => setIsChangingPassword(false)}
+          onSubmit={handleChangePassword}
+        />
+      )}
+
       {currentCollaborator && (
         <Header 
           collaborator={currentCollaborator} 
