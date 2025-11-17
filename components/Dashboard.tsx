@@ -8,7 +8,6 @@ interface DashboardProps {
   interactions: Interaction[];
   addInteraction: (nationality: string, count: number, visitReason?: string, lengthOfStay?: string) => string;
   updateInteraction: (interaction: Interaction) => void;
-  deleteInteraction: (id: string) => void;
 }
 
 const InteractionRow: React.FC<{
@@ -147,11 +146,7 @@ const InteractionRow: React.FC<{
 }
 
 
-const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addInteraction, updateInteraction, deleteInteraction }) => {
-  const [notification, setNotification] = useState('');
-  const [lastAddedInteractionId, setLastAddedInteractionId] = useState<string | null>(null);
-  const notificationTimeoutRef = useRef<number | null>(null);
-  
+const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addInteraction, updateInteraction }) => {
   // Form state
   const [nationality, setNationality] = useState('');
   const [count, setCount] = useState<number | string>(1);
@@ -209,46 +204,16 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
     setSortConfig({ key, direction });
   };
 
-  const clearNotification = () => {
-    if (notificationTimeoutRef.current) {
-        clearTimeout(notificationTimeoutRef.current);
-    }
-    setNotification('');
-    setLastAddedInteractionId(null);
-  };
-
-  const showNotification = (message: string, interactionId?: string) => {
-    clearNotification();
-    setNotification(message);
-    if (interactionId) {
-        setLastAddedInteractionId(interactionId);
-    }
-
-    notificationTimeoutRef.current = window.setTimeout(() => {
-        clearNotification();
-    }, 5000); // Increased to 5 seconds
-  };
-  
-  const handleUndoAdd = () => {
-    if (lastAddedInteractionId) {
-        deleteInteraction(lastAddedInteractionId);
-        showNotification('Registo desfeito.');
-    }
-  };
-
   const handleAddInteraction = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nationality.trim()) {
-        alert("Por favor, preencha a nacionalidade.");
+        // A notificação de erro será mostrada pelo App.tsx se necessário
         return;
     }
     const interactionCount = typeof count === 'number' ? count : parseInt(String(count) || '1', 10);
     const finalCount = interactionCount > 0 ? interactionCount : 1;
 
-    const newInteractionId = addInteraction(nationality, finalCount, visitReason, lengthOfStay);
-    if (newInteractionId) {
-        showNotification(`Registo para ${finalCount}x '${nationality}' adicionado.`, newInteractionId);
-    }
+    addInteraction(nationality, finalCount, visitReason, lengthOfStay);
     
     // Reset form
     setNationality('');
@@ -281,26 +246,12 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
 
   return (
     <div className="max-w-7xl mx-auto">
-        {notification && (
-            <div className="fixed top-5 right-5 bg-green-600 text-white py-2 px-4 rounded-lg shadow-lg z-50 flex items-center gap-4">
-                <span>{notification}</span>
-                {lastAddedInteractionId && (
-                    <button 
-                        onClick={handleUndoAdd} 
-                        className="font-bold underline hover:text-green-100"
-                    >
-                        Desfazer
-                    </button>
-                )}
-            </div>
-        )}
         <datalist id="nationalities-all">
             {ALL_NATIONALITIES.map(nat => <option key={nat} value={nat} />)}
         </datalist>
         <datalist id="nationalities-all-edit">
             {ALL_NATIONALITIES.map(nat => <option key={nat} value={nat} />)}
         </datalist>
-
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1">

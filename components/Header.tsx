@@ -1,7 +1,9 @@
 
+
+
 import React from 'react';
 import { Collaborator, View } from '../types';
-import { ChartBarIcon, LayoutDashboardIcon, LogOutIcon, ShieldCheckIcon } from './icons';
+import { ChartBarIcon, EditIcon, LogOutIcon, ShieldCheckIcon } from './icons';
 
 interface HeaderProps {
   collaborator: Collaborator;
@@ -38,8 +40,8 @@ const Header: React.FC<HeaderProps> = ({ collaborator, currentView, setView, onL
             <h1 className="text-xl font-bold text-slate-900">Posto de Turismo</h1>
             <nav className="hidden sm:flex items-center gap-4 bg-slate-100 p-1 rounded-lg">
                 <NavButton onClick={() => setView('dashboard')} isActive={currentView === 'dashboard'}>
-                    <LayoutDashboardIcon className="w-5 h-5" />
-                    <span>Registo</span>
+                    <EditIcon className="w-5 h-5" />
+                    <span>Atendimentos</span>
                 </NavButton>
                 <NavButton onClick={() => setView('reports')} isActive={currentView === 'reports'}>
                     <ChartBarIcon className="w-5 h-5" />
@@ -73,8 +75,8 @@ const Header: React.FC<HeaderProps> = ({ collaborator, currentView, setView, onL
         {/* Mobile Nav Below */}
         <nav className="sm:hidden flex items-center gap-4 bg-slate-100 p-1 rounded-lg mb-4 justify-start">
             <NavButton onClick={() => setView('dashboard')} isActive={currentView === 'dashboard'}>
-                <LayoutDashboardIcon className="w-5 h-5" />
-                <span>Registo</span>
+                <EditIcon className="w-5 h-5" />
+                <span>Atendimentos</span>
             </NavButton>
             <NavButton onClick={() => setView('reports')} isActive={currentView === 'reports'}>
                 <ChartBarIcon className="w-5 h-5" />

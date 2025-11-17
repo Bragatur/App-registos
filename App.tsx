@@ -1,17 +1,56 @@
 import React, { useState, useEffect } from 'react';
-import { Collaborator, Interaction, View, PRIMARY_ADMIN_ID } from './types';
+import { Collaborator, Interaction, View, PRIMARY_ADMIN_ID, Notification as NotificationType } from './types';
 import useLocalStorage from './hooks/useLocalStorage';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Reports from './components/Reports';
 import Header from './components/Header';
 import Admin from './components/Admin';
+import { CheckCircleIcon, XCircleIcon } from './components/icons';
+
+const Notification: React.FC<{ notification: NotificationType | null, onDismiss: () => void }> = ({ notification, onDismiss }) => {
+    if (!notification) return null;
+
+    useEffect(() => {
+        const timer = setTimeout(onDismiss, 5000);
+        return () => clearTimeout(timer);
+    }, [notification, onDismiss]);
+
+    const isSuccess = notification.type === 'success';
+    const bgColor = isSuccess ? 'bg-green-600' : 'bg-red-600';
+    const Icon = isSuccess ? CheckCircleIcon : XCircleIcon;
+
+    return (
+        <div className={`fixed top-5 right-5 ${bgColor} text-white py-3 px-5 rounded-lg shadow-lg z-50 flex items-center gap-4 animate-fade-in-up`}>
+            <Icon className="w-6 h-6" />
+            <span>{notification.message}</span>
+            {notification.undoAction && (
+                <button
+                    onClick={() => {
+                        notification.undoAction?.();
+                        onDismiss();
+                    }}
+                    className="font-bold underline hover:text-green-100"
+                >
+                    Desfazer
+                </button>
+            )}
+             <button onClick={onDismiss} className="text-2xl leading-none absolute top-0 right-1.5 hover:text-white/80">&times;</button>
+        </div>
+    );
+};
+
 
 const App: React.FC = () => {
   const [collaborators, setCollaborators] = useLocalStorage<Collaborator[]>('tourist_app_collaborators', []);
   const [interactions, setInteractions] = useLocalStorage<Interaction[]>('tourist_app_interactions', []);
   const [currentCollaborator, setCurrentCollaborator] = useState<Collaborator | null>(null);
   const [currentView, setCurrentView] = useState<View>('login');
+  const [notification, setNotification] = useState<NotificationType | null>(null);
+
+  const showNotification = (message: string, type: 'success' | 'error', undoAction?: () => void) => {
+    setNotification({ message, type, undoAction });
+  };
   
   useEffect(() => {
     const ADMIN_USERNAME = 'admin';
@@ -53,7 +92,6 @@ const App: React.FC = () => {
     });
   }, [setCollaborators]);
 
-  // Sincroniza as interações para remover registos órfãos quando um colaborador é eliminado.
   useEffect(() => {
     const collaboratorIds = new Set(collaborators.map(c => c.id));
     if (collaboratorIds.size > 0) {
@@ -62,22 +100,25 @@ const App: React.FC = () => {
   }, [collaborators, setInteractions]);
 
 
-  const handleLogin = (name: string, password: string): { success: boolean, message: string } => {
+  const handleLogin = (name: string, password: string) => {
     const collaborator = collaborators.find(c => c.name.toLowerCase() === name.toLowerCase());
 
     if (!collaborator) {
-      return { success: false, message: 'Utilizador não encontrado.' };
+      showNotification('Utilizador não encontrado.', 'error');
+      return;
     }
     if (collaborator.password !== password) {
-      return { success: false, message: 'Password incorreta.' };
+      showNotification('Password incorreta.', 'error');
+      return;
     }
     if (collaborator.status !== 'aprovado') {
-      return { success: false, message: 'A sua conta aguarda aprovação de um administrador.' };
+      showNotification('A sua conta aguarda aprovação de um administrador.', 'error');
+      return;
     }
     
     setCurrentCollaborator(collaborator);
     setCurrentView('dashboard');
-    return { success: true, message: 'Login bem-sucedido!' };
+    showNotification(`Bem-vindo, ${collaborator.name}!`, 'success');
   };
 
   const handleLogout = () => {
@@ -85,15 +126,18 @@ const App: React.FC = () => {
     setCurrentView('login');
   };
 
-  const addCollaborator = (name: string, password: string, email: string): { success: boolean, message: string, collaborator?: Collaborator } => {
+  const addCollaborator = (name: string, password: string, email: string) => {
     if (name.trim().toLowerCase() === 'admin') {
-      return { success: false, message: 'O nome de utilizador "admin" é reservado.' };
+      showNotification('O nome de utilizador "admin" é reservado.', 'error');
+      return;
     }
     if (collaborators.some(c => c.name.toLowerCase() === name.trim().toLowerCase())) {
-        return { success: false, message: 'Já existe um colaborador com este nome.' };
+        showNotification('Já existe um colaborador com este nome.', 'error');
+        return;
     }
      if (collaborators.some(c => c.email.toLowerCase() === email.trim().toLowerCase())) {
-        return { success: false, message: 'Este email já está a ser utilizado.' };
+        showNotification('Este email já está a ser utilizado.', 'error');
+        return;
     }
     
     const newCollaborator: Collaborator = {
@@ -105,83 +149,88 @@ const App: React.FC = () => {
       status: 'pendente',
     };
     setCollaborators(prev => [...prev, newCollaborator]);
-    return { success: true, message: "Utilizador criado com sucesso.", collaborator: newCollaborator };
+    showNotification('Registo efetuado. Aguarde aprovação de um administrador.', 'success');
   };
 
   const approveCollaborator = (id: string) => {
     setCollaborators(prev =>
       prev.map(c => (c.id === id ? { ...c, status: 'aprovado' } : c))
     );
+    showNotification("Utilizador aprovado com sucesso.", "success");
   };
 
   const rejectCollaborator = (id: string) => {
     setCollaborators(prev => prev.filter(c => c.id !== id));
+    showNotification("Registo pendente recusado e eliminado.", "success");
   };
   
   const deleteCollaborator = (id: string) => {
-    setCollaborators(prevCollaborators => {
-        if (id === PRIMARY_ADMIN_ID) {
-            alert('Não é possível eliminar a conta de administrador principal.');
-            return prevCollaborators;
-        }
+    const targetUser = collaborators.find(c => c.id === id);
+    if (!targetUser) return;
 
-        const targetUser = prevCollaborators.find(c => c.id === id);
-        if (!targetUser) return prevCollaborators;
-        
-        if (targetUser.isAdmin) {
-          const adminCount = prevCollaborators.filter(c => c.isAdmin).length;
-          if (adminCount <= 1) {
-            alert('Não é possível eliminar o último administrador da aplicação.');
-            return prevCollaborators;
-          }
-        }
-        
-        return prevCollaborators.filter(c => c.id !== id);
-    });
+    if (id === PRIMARY_ADMIN_ID) {
+        showNotification('Não é possível eliminar a conta de administrador principal.', 'error');
+        return;
+    }
+    
+    if (targetUser.isAdmin) {
+      const adminCount = collaborators.filter(c => c.isAdmin).length;
+      if (adminCount <= 1) {
+        showNotification('Não é possível eliminar o último administrador da aplicação.', 'error');
+        return;
+      }
+    }
+    
+    setCollaborators(prev => prev.filter(c => c.id !== id));
+    showNotification(`Utilizador "${targetUser.name}" eliminado com sucesso.`, 'success');
   };
 
   const resetUserPassword = (userId: string, newPassword: string) => {
     setCollaborators(prev =>
       prev.map(c => (c.id === userId ? { ...c, password: newPassword } : c))
     );
+    showNotification('Password redefinida com sucesso.', 'success');
   };
   
-  const requestPasswordReset = (email: string): { success: boolean, message: string } => {
+  const requestPasswordReset = (email: string) => {
     const userToReset = collaborators.find(c => c.email.toLowerCase() === email.toLowerCase());
     if (!userToReset) {
-      return { success: false, message: "Não foi encontrada nenhuma conta com este email." };
+      showNotification("Não foi encontrada nenhuma conta com este email.", "error");
+      return;
     }
     
     const newPassword = Math.random().toString(36).slice(-8);
-    resetUserPassword(userToReset.id, newPassword);
+    setCollaborators(prev =>
+      prev.map(c => (c.id === userToReset.id ? { ...c, password: newPassword } : c))
+    );
 
-    return { success: true, message: `Uma nova password foi gerada para ${userToReset.name}. A sua nova password é: ${newPassword}` };
+    showNotification(`Nova password para ${userToReset.name}: ${newPassword}`, 'success');
   };
 
   const toggleAdminStatus = (userId: string) => {
-    setCollaborators(prev => {
-        if (userId === PRIMARY_ADMIN_ID) {
-            alert('Não é possível remover os privilégios da conta de administrador principal.');
-            return prev;
-        }
-        const targetUser = prev.find(c => c.id === userId);
-        if (!targetUser) return prev;
+    const targetUser = collaborators.find(c => c.id === userId);
+    if (!targetUser) return;
 
-        if (targetUser.isAdmin) {
-            const adminCount = prev.filter(c => c.isAdmin).length;
-            if (adminCount <= 1) {
-              alert('Não é possível remover os privilégios do último administrador.');
-              return prev;
-            }
+    if (userId === PRIMARY_ADMIN_ID) {
+        showNotification('Não é possível remover os privilégios da conta de administrador principal.', 'error');
+        return;
+    }
+
+    if (targetUser.isAdmin) {
+        const adminCount = collaborators.filter(c => c.isAdmin).length;
+        if (adminCount <= 1) {
+          showNotification('Não é possível remover os privilégios do último administrador.', 'error');
+          return;
         }
-        
-        return prev.map(c => (c.id === userId ? { ...c, isAdmin: !c.isAdmin } : c));
-    });
+    }
+    
+    setCollaborators(prev => prev.map(c => (c.id === userId ? { ...c, isAdmin: !c.isAdmin } : c)));
+    showNotification(`Permissões de ${targetUser.name} atualizadas.`, 'success');
   };
 
   const updateCollaboratorProfile = (id: string, newName: string, newPass: string) => {
     if (collaborators.some(c => c.id !== id && c.name.toLowerCase() === newName.trim().toLowerCase())) {
-      alert('Já existe um colaborador com este nome.');
+      showNotification('Já existe um colaborador com este nome.', 'error');
       return;
     }
 
@@ -203,6 +252,7 @@ const App: React.FC = () => {
         return c;
       })
     );
+    showNotification('Perfil atualizado com sucesso.', 'success');
   };
 
   const addInteraction = (nationality: string, count: number, visitReason?: string, lengthOfStay?: string): string => {
@@ -217,6 +267,7 @@ const App: React.FC = () => {
       lengthOfStay: lengthOfStay && lengthOfStay.trim() ? lengthOfStay.trim() : undefined,
     };
     setInteractions(prev => [newInteraction, ...prev]);
+    showNotification(`Registo para ${count}x '${nationality}' adicionado.`, 'success', () => deleteInteraction(newInteraction.id, true));
     return newInteraction.id;
   };
   
@@ -224,14 +275,22 @@ const App: React.FC = () => {
     setInteractions(prev =>
       prev.map((i) => (i.id === updatedInteraction.id ? updatedInteraction : i))
     );
+    showNotification("Registo atualizado.", 'success');
   };
 
-  const deleteInteraction = (id: string) => {
+  const deleteInteraction = (id: string, isUndo: boolean = false) => {
     setInteractions(prev => prev.filter((i) => i.id !== id));
+    if (isUndo) {
+        showNotification('Registo desfeito.', 'success');
+    }
   };
 
   const resetCollaboratorInteractions = (collaboratorId: string) => {
+    const user = collaborators.find(c => c.id === collaboratorId);
     setInteractions(prev => prev.filter(i => i.collaboratorId !== collaboratorId));
+    if (user) {
+        showNotification(`Todos os registos de "${user.name}" foram eliminados.`, 'success');
+    }
   };
 
   const renderContent = () => {
@@ -247,11 +306,10 @@ const App: React.FC = () => {
             interactions={interactions.filter(i => i.collaboratorId === currentCollaborator.id)}
             addInteraction={addInteraction}
             updateInteraction={updateInteraction}
-            deleteInteraction={deleteInteraction}
           />
         );
       case 'reports':
-        return <Reports allInteractions={interactions} collaborators={collaborators} />;
+        return <Reports allInteractions={interactions} collaborators={collaborators} showNotification={showNotification} />;
       case 'admin':
         return (
           <Admin
@@ -259,11 +317,8 @@ const App: React.FC = () => {
             currentAdminId={currentCollaborator.id}
             onApprove={approveCollaborator}
             onReject={rejectCollaborator}
-            onDelete={deleteCollaborator}
             onResetPassword={resetUserPassword}
-            onToggleAdmin={toggleAdminStatus}
             onUpdateProfile={updateCollaboratorProfile}
-            onResetInteractions={resetCollaboratorInteractions}
           />
         );
       default:
@@ -273,6 +328,7 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-slate-100 min-h-screen text-slate-800 font-sans">
+      <Notification notification={notification} onDismiss={() => setNotification(null)} />
       {currentCollaborator && (
         <Header 
           collaborator={currentCollaborator} 

@@ -22,3 +22,9 @@ export interface Interaction {
 export type View = 'login' | 'dashboard' | 'reports' | 'admin';
 
 export type ReportPeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+
+export interface Notification {
+  message: string;
+  type: 'success' | 'error';
+  undoAction?: () => void;
+}

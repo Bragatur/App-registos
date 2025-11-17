@@ -73,6 +73,7 @@ const WorldMapChart: React.FC<{ data: { [key: string]: number } }> = ({ data }) 
 interface ReportsProps {
   allInteractions: Interaction[];
   collaborators: Collaborator[];
+  showNotification: (message: string, type: 'success' | 'error') => void;
 }
 
 const KpiCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode }> = ({ title, value, icon }) => (
@@ -87,7 +88,7 @@ const KpiCard: React.FC<{ title: string; value: string | number; icon: React.Rea
     </div>
 );
 
-const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => {
+const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showNotification }) => {
   const [period, setPeriod] = useState<ReportPeriod>('monthly');
   const [selectedCollaborator, setSelectedCollaborator] = useState<string>('all');
   const [isExporting, setIsExporting] = useState(false);
@@ -239,13 +240,19 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
   const getChartAsImage = async (elementId: string): Promise<string | null> => {
     const element = document.getElementById(elementId);
     if (!element) return null;
-    const canvas = await html2canvas(element, { backgroundColor: '#ffffff', scale: 2 });
-    return canvas.toDataURL('image/png', 0.9);
+    try {
+        const canvas = await html2canvas(element, { backgroundColor: '#ffffff', scale: 2 });
+        return canvas.toDataURL('image/png', 0.9);
+    } catch (error) {
+        console.error("Error generating chart image:", error);
+        showNotification("Erro ao gerar imagem de um gráfico.", "error");
+        return null;
+    }
   };
   
   const handleExportXLSX = async () => {
     if (filteredInteractions.length === 0) {
-        alert("Não há dados para exportar.");
+        showNotification("Não há dados para exportar.", "error");
         return;
     }
     setIsExporting(true);
@@ -300,14 +307,16 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
 
     XLSX.writeFile(wb, `${getFilename()}.xlsx`);
     setIsExporting(false);
+    showNotification("Relatório XLSX exportado com sucesso!", "success");
   };
 
   const handleExportPDF = async () => {
     if (filteredInteractions.length === 0) {
-        alert("Não há dados para exportar.");
+        showNotification("Não há dados para exportar.", "error");
         return;
     }
     setIsExporting(true);
+    showNotification("A gerar o seu relatório PDF...", "success");
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
@@ -381,6 +390,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators }) => 
 
     doc.save(`${getFilename()}.pdf`);
     setIsExporting(false);
+    showNotification("Relatório PDF exportado com sucesso!", "success");
   };
 
   const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280'];

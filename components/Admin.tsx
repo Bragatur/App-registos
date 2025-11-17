@@ -1,20 +1,16 @@
 import React, { useState } from 'react';
-import { Collaborator, PRIMARY_ADMIN_ID } from '../types';
+import { Collaborator } from '../types';
 import { UsersIcon, CheckCircleIcon, XCircleIcon, CogIcon } from './icons';
 
 interface ManageUserModalProps {
   user: Collaborator;
   isSelf: boolean;
-  isPrimaryAdmin: boolean;
   onClose: () => void;
   onUpdateProfile: (id: string, newName: string, newPass: string) => void;
   onResetPassword: (id: string, newPass: string) => void;
-  onToggleAdmin: (id: string) => void;
-  onDelete: (id: string) => void;
-  onResetInteractions: (id: string) => void;
 }
 
-const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, isPrimaryAdmin, onClose, onUpdateProfile, onResetPassword, onToggleAdmin, onDelete, onResetInteractions }) => {
+const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose, onUpdateProfile, onResetPassword }) => {
   const [newName, setNewName] = useState(user.name);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -28,7 +24,6 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, isPrima
       return;
     }
     onResetPassword(user.id, newPassword);
-    alert(`Password para ${user.name} foi redefinida com sucesso.`);
     onClose();
   };
   
@@ -44,32 +39,8 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, isPrima
       return;
     }
     onUpdateProfile(user.id, newName, newPassword);
-    alert('O seu perfil foi atualizado com sucesso.');
     onClose();
   }
-
-  const handleToggleAdmin = () => {
-    const action = user.isAdmin ? 'remover os privilégios de administrador de' : 'promover a administrador o utilizador';
-    if (window.confirm(`Tem a certeza que deseja ${action} ${user.name}?`)) {
-        onToggleAdmin(user.id);
-        onClose();
-    }
-  };
-
-  const handleDelete = () => {
-    if (window.confirm(`Tem a certeza que deseja eliminar permanentemente o utilizador "${user.name}" e todos os seus registos?`)) {
-      onDelete(user.id);
-      onClose();
-    }
-  };
-
-  const handleResetInteractions = () => {
-    if (window.confirm(`Tem a certeza que deseja eliminar TODOS os registos de atendimento do utilizador "${user.name}"? Esta ação não pode ser desfeita.`)) {
-      onResetInteractions(user.id);
-      alert(`Todos os registos de "${user.name}" foram eliminados.`);
-      onClose();
-    }
-  };
 
   if (isSelf) {
     return (
@@ -122,27 +93,6 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, isPrima
           <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors">Redefinir Password</button>
         </form>
 
-        {!isPrimaryAdmin && (
-            <>
-                <div className="space-y-3 border-t pt-4">
-                    <h4 className="font-semibold text-slate-700">Permissões</h4>
-                    <button onClick={handleToggleAdmin} className="w-full text-left bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-semibold px-4 py-3 rounded-lg transition-colors">
-                        {user.isAdmin ? 'Remover Privilégios de Administrador' : 'Promover a Administrador'}
-                    </button>
-                </div>
-
-                <div className="space-y-3 border-t pt-4">
-                    <h4 className="font-semibold text-red-700">Zona de Perigo</h4>
-                    <button onClick={handleResetInteractions} className="w-full text-left bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-3 rounded-lg transition-colors">
-                        Repor Registos do Utilizador
-                    </button>
-                    <button onClick={handleDelete} className="w-full text-left bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-3 rounded-lg transition-colors">
-                        Eliminar Utilizador Permanentemente
-                    </button>
-                </div>
-            </>
-        )}
-
         <div className="text-right border-t pt-4">
           <button onClick={onClose} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-4 py-2 rounded-lg transition-colors">Fechar</button>
         </div>
@@ -157,14 +107,11 @@ interface AdminProps {
   currentAdminId: string;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
-  onDelete: (id: string) => void;
   onResetPassword: (id: string, newPass: string) => void;
-  onToggleAdmin: (id: string) => void;
   onUpdateProfile: (id: string, newName: string, newPass: string) => void;
-  onResetInteractions: (id: string) => void;
 }
 
-const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove, onReject, onDelete, onResetPassword, onToggleAdmin, onUpdateProfile, onResetInteractions }) => {
+const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove, onReject, onResetPassword, onUpdateProfile }) => {
   const [managingUser, setManagingUser] = useState<Collaborator | null>(null);
 
   const pendingCollaborators = collaborators.filter(c => c.status === 'pendente');
@@ -249,13 +196,9 @@ const Admin: React.FC<AdminProps> = ({ collaborators, currentAdminId, onApprove,
         <ManageUserModal 
           user={managingUser}
           isSelf={managingUser.id === currentAdminId}
-          isPrimaryAdmin={managingUser.id === PRIMARY_ADMIN_ID}
           onClose={() => setManagingUser(null)}
           onResetPassword={onResetPassword}
-          onToggleAdmin={onToggleAdmin}
-          onDelete={onDelete}
           onUpdateProfile={onUpdateProfile}
-          onResetInteractions={onResetInteractions}
         />
       )}
     </>
