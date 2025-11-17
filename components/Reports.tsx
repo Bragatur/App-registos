@@ -1,8 +1,9 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Interaction, Collaborator, ReportPeriod } from '../types';
 import { ALL_NATIONALITIES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, MapIcon } from './icons';
+import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, MapIcon, EditIcon, BookOpenIcon, ClockIcon } from './icons';
 
 // Declaração para bibliotecas globais carregadas via CDN
 declare const XLSX: any;
@@ -70,10 +71,73 @@ const WorldMapChart: React.FC<{ data: { [key: string]: number } }> = ({ data }) 
     return <div ref={mapRef} style={{ width: '100%', height: '400px' }}></div>;
 };
 
+interface EditInteractionModalProps {
+    interaction: Interaction;
+    onClose: () => void;
+    onSave: (updatedInteraction: Interaction) => void;
+}
+
+const EditInteractionModal: React.FC<EditInteractionModalProps> = ({ interaction, onClose, onSave }) => {
+    const [nationality, setNationality] = useState(interaction.nationality);
+    const [count, setCount] = useState(interaction.count || 1);
+    const [visitReason, setVisitReason] = useState(interaction.visitReason || '');
+    const [lengthOfStay, setLengthOfStay] = useState(interaction.lengthOfStay || '');
+
+    const handleSave = (e: React.FormEvent) => {
+        e.preventDefault();
+        const reasonTrimmed = visitReason.trim();
+        const stayTrimmed = lengthOfStay.trim();
+        const interactionCount = count > 0 ? count : 1;
+
+        onSave({
+            ...interaction,
+            nationality: nationality.trim(),
+            count: interactionCount,
+            visitReason: reasonTrimmed || undefined,
+            lengthOfStay: stayTrimmed || undefined,
+        });
+    };
+    
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4" onClick={onClose}>
+            <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-start">
+                    <h3 className="text-xl font-bold text-slate-800">Editar Registo</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+                </div>
+                <form onSubmit={handleSave} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="edit-nationality">Nacionalidade</label>
+                        <input id="edit-nationality" type="text" value={nationality} onChange={(e) => setNationality(e.target.value)} list="nationalities-all" className="w-full px-3 py-2 border border-slate-300 rounded-lg" required autoFocus />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="edit-count">Nº de Pessoas</label>
+                        <input id="edit-count" type="number" value={count} onChange={(e) => setCount(parseInt(e.target.value, 10) || 1)} min="1" className="w-full px-3 py-2 border border-slate-300 rounded-lg" required />
+                    </div>
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="edit-visitReason">Motivo da Visita (Opcional)</label>
+                        <input id="edit-visitReason" type="text" value={visitReason} onChange={(e) => setVisitReason(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                    </div>
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="edit-lengthOfStay">Tempo de Estadia (Opcional)</label>
+                        <input id="edit-lengthOfStay" type="text" value={lengthOfStay} onChange={(e) => setLengthOfStay(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                    </div>
+                    <div className="flex justify-end gap-3 pt-2">
+                        <button type="button" onClick={onClose} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-4 py-2 rounded-lg">Cancelar</button>
+                        <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg">Guardar Alterações</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 interface ReportsProps {
   allInteractions: Interaction[];
   collaborators: Collaborator[];
   showNotification: (message: string, type: 'success' | 'error') => void;
+  currentCollaborator: Collaborator | null;
+  updateInteraction: (interaction: Interaction) => void;
 }
 
 const KpiCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode }> = ({ title, value, icon }) => (
@@ -88,10 +152,17 @@ const KpiCard: React.FC<{ title: string; value: string | number; icon: React.Rea
     </div>
 );
 
-const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showNotification }) => {
+const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showNotification, currentCollaborator, updateInteraction }) => {
   const [period, setPeriod] = useState<ReportPeriod>('monthly');
   const [selectedCollaborator, setSelectedCollaborator] = useState<string>('all');
   const [isExporting, setIsExporting] = useState(false);
+  const [editingInteraction, setEditingInteraction] = useState<Interaction | null>(null);
+  
+  // Pagination for admin table
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
+
+  const isAdmin = currentCollaborator?.isAdmin === true;
 
   const periodLabels: Record<ReportPeriod, string> = {
     weekly: 'Últimos 7 dias',
@@ -122,12 +193,31 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
         break;
     }
     
-    return allInteractions.filter(interaction => {
-        const interactionDate = new Date(interaction.timestamp);
-        const collaboratorMatch = selectedCollaborator === 'all' || interaction.collaboratorId === selectedCollaborator;
-        return interactionDate >= startDate && interactionDate <= now && collaboratorMatch;
-    });
+    return allInteractions
+        .filter(interaction => {
+            const interactionDate = new Date(interaction.timestamp);
+            const collaboratorMatch = selectedCollaborator === 'all' || interaction.collaboratorId === selectedCollaborator;
+            return interactionDate >= startDate && interactionDate <= now && collaboratorMatch;
+        })
+        .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [allInteractions, period, selectedCollaborator]);
+  
+  // Pagination logic
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredInteractions.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredInteractions.length / itemsPerPage);
+
+  const paginate = (pageNumber: number) => {
+    if (pageNumber > 0 && pageNumber <= totalPages) {
+        setCurrentPage(pageNumber);
+    }
+  };
+  
+  useEffect(() => {
+      setCurrentPage(1);
+  }, [period, selectedCollaborator]);
+
 
   const nationalityData = useMemo(() => {
     const counts: { [key: string]: number } = {};
@@ -397,6 +487,20 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
+        {editingInteraction && (
+            <EditInteractionModal
+                interaction={editingInteraction}
+                onClose={() => setEditingInteraction(null)}
+                onSave={(updated) => {
+                    updateInteraction(updated);
+                    setEditingInteraction(null);
+                }}
+            />
+        )}
+        <datalist id="nationalities-all">
+            {ALL_NATIONALITIES.map(nat => <option key={nat} value={nat} />)}
+        </datalist>
+
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-3xl font-bold text-slate-800">Relatórios</h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -407,7 +511,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
                 </div>
                  <select value={selectedCollaborator} onChange={(e) => setSelectedCollaborator(e.target.value)} className="px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm focus:ring-2 focus:ring-blue-500">
                     <option value="all">Todos</option>
-                    {collaborators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {collaborators.filter(c => c.status === 'aprovado').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 <button onClick={handleExportXLSX} disabled={isExporting} className="flex items-center gap-2 px-3 py-2 rounded-md font-semibold bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-100 transition-colors disabled:bg-slate-200 disabled:cursor-not-allowed">
                     <FileSpreadsheetIcon className="w-5 h-5 text-green-600" />
@@ -508,6 +612,63 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
                     </div>
                 </div>
             </div>
+
+            {/* Admin-only: All Records Table */}
+            {isAdmin && (
+                <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                    <h3 className="text-xl font-bold mb-4 text-slate-800">Todos os Registos</h3>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-slate-100">
+                                <tr>
+                                    <th className="p-3 font-semibold text-slate-600">Pessoas</th>
+                                    <th className="p-3 font-semibold text-slate-600">Nacionalidade e Detalhes</th>
+                                    <th className="p-3 font-semibold text-slate-600">Data</th>
+                                    <th className="p-3 font-semibold text-slate-600">Colaborador</th>
+                                    <th className="p-3 font-semibold text-slate-600 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {currentItems.map(interaction => (
+                                    <tr key={interaction.id} className="border-b border-slate-200 hover:bg-slate-50">
+                                        <td className="p-3 font-bold">{interaction.count}x</td>
+                                        <td className="p-3">
+                                             <div>
+                                                <span className="font-medium text-slate-800">{interaction.nationality}</span>
+                                                {(interaction.visitReason || interaction.lengthOfStay) && (
+                                                    <div className="text-xs text-slate-500 mt-1 space-y-1 max-w-xs">
+                                                        {interaction.visitReason && <p className="flex items-start"><BookOpenIcon className="w-3 h-3 mr-1.5 shrink-0 mt-0.5"/> <span>{interaction.visitReason}</span></p>}
+                                                        {interaction.lengthOfStay && <p className="flex items-start"><ClockIcon className="w-3 h-3 mr-1.5 shrink-0 mt-0.5"/> <span>{interaction.lengthOfStay}</span></p>}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="p-3 text-sm text-slate-500">{new Date(interaction.timestamp).toLocaleString('pt-PT')}</td>
+                                        <td className="p-3 text-sm">{collaborators.find(c => c.id === interaction.collaboratorId)?.name || 'N/A'}</td>
+                                        <td className="p-3 text-right">
+                                            <button 
+                                                onClick={() => setEditingInteraction(interaction)} 
+                                                className="text-slate-500 hover:text-blue-600 p-2 rounded-full hover:bg-blue-100 transition-colors"
+                                                aria-label="Editar"
+                                            >
+                                                <EditIcon className="w-5 h-5" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                     {totalPages > 1 && (
+                        <div className="flex justify-between items-center mt-4">
+                            <button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} className="px-4 py-2 bg-slate-200 rounded-md disabled:opacity-50">Anterior</button>
+                            <span>Página {currentPage} de {totalPages}</span>
+                            <button onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages} className="px-4 py-2 bg-slate-200 rounded-md disabled:opacity-50">Próxima</button>
+                        </div>
+                    )}
+                </div>
+            )}
+
         </div>
         ) : (
             <div className="text-center py-20 text-slate-500 bg-white rounded-xl shadow-md border border-slate-200">

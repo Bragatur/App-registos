@@ -8,15 +8,15 @@ interface ManageUserModalProps {
   user: Collaborator;
   isSelf: boolean;
   onClose: () => void;
-  onUpdateProfile: (id: string, newName: string, newPass: string) => void;
-  onResetPassword: (id: string, newPass: string) => void;
+  onUpdateProfile: (id: string, newName: string, newEmail: string, newPass: string) => void;
   onDelete: (id: string) => void;
   onToggleAdmin: (id: string) => void;
   onResetInteractions: (id: string) => void;
 }
 
-const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose, onUpdateProfile, onResetPassword, onDelete, onToggleAdmin, onResetInteractions }) => {
+const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose, onUpdateProfile, onDelete, onToggleAdmin, onResetInteractions }) => {
   const [newName, setNewName] = useState(user.name);
+  const [newEmail, setNewEmail] = useState(user.email);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -27,29 +27,18 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
     confirmClass: string;
   } | null>(null);
   
-  const handlePasswordReset = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (!newPassword || newPassword !== confirmPassword) {
-      setError('As passwords não coincidem ou estão em branco.');
-      return;
-    }
-    onResetPassword(user.id, newPassword);
-    onClose();
-  };
-  
   const handleProfileUpdate = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-     if (newName.trim() === '') {
-      setError('O nome de utilizador não pode estar em branco.');
+    if (newName.trim() === '' || newEmail.trim() === '') {
+      setError('Nome e email não podem estar em branco.');
       return;
     }
     if (newPassword && newPassword !== confirmPassword) {
       setError('As passwords não coincidem.');
       return;
     }
-    onUpdateProfile(user.id, newName, newPassword);
+    onUpdateProfile(user.id, newName, newEmail, newPassword);
     onClose();
   }
 
@@ -91,6 +80,10 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="self-name">Nome de Utilizador</label>
               <input id="self-name" type="text" value={newName} onChange={e => setNewName(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg"/>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="self-email">Email</label>
+              <input id="self-email" type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg"/>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="self-pass">Nova Password (deixar em branco para não alterar)</label>
@@ -146,10 +139,18 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
               <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
           </div>
           
-          <form onSubmit={handlePasswordReset} className="space-y-3 border-t pt-4">
-            <h4 className="font-semibold text-slate-700">Redefinir Password</h4>
+          <form onSubmit={handleProfileUpdate} className="space-y-3 border-t pt-4">
+            <h4 className="font-semibold text-slate-700">Editar Perfil</h4>
             <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="new-pass">Nova Password</label>
+              <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="edit-name">Nome de Utilizador</label>
+              <input id="edit-name" type="text" value={newName} onChange={e => setNewName(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+            </div>
+             <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="edit-email">Email</label>
+              <input id="edit-email" type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="new-pass">Nova Password (deixar em branco para não alterar)</label>
               <input id="new-pass" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="••••••••" />
             </div>
             <div>
@@ -157,7 +158,7 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
               <input id="confirm-pass" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="••••••••" />
             </div>
             {error && <p className="text-red-600 text-sm">{error}</p>}
-            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors">Redefinir Password</button>
+            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors">Guardar Alterações</button>
           </form>
 
           {user.id !== PRIMARY_ADMIN_ID && (
@@ -215,8 +216,7 @@ interface AdminProps {
   onDelete: (id: string) => void;
   onToggleAdmin: (id: string) => void;
   onResetInteractions: (id: string) => void;
-  onResetPassword: (id: string, newPass: string) => void;
-  onUpdateProfile: (id: string, newName: string, newPass: string) => void;
+  onUpdateProfile: (id: string, newName: string, newEmail: string, newPass: string) => void;
 }
 
 const Admin: React.FC<AdminProps> = ({ 
@@ -227,7 +227,6 @@ const Admin: React.FC<AdminProps> = ({
   onDelete,
   onToggleAdmin,
   onResetInteractions,
-  onResetPassword, 
   onUpdateProfile, 
 }) => {
   const [managingUser, setManagingUser] = useState<Collaborator | null>(null);
@@ -315,7 +314,6 @@ const Admin: React.FC<AdminProps> = ({
           user={managingUser}
           isSelf={managingUser.id === currentAdminId}
           onClose={() => setManagingUser(null)}
-          onResetPassword={onResetPassword}
           onUpdateProfile={onUpdateProfile}
           onDelete={onDelete}
           onToggleAdmin={onToggleAdmin}

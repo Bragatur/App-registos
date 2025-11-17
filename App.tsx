@@ -249,13 +249,6 @@ const App: React.FC = () => {
     showNotification(`Utilizador "${targetUser.name}" e todos os seus registos foram eliminados.`, 'success');
   };
 
-  const resetUserPassword = (userId: string, newPassword: string) => {
-    setCollaborators(prev =>
-      prev.map(c => (c.id === userId ? { ...c, password: newPassword } : c))
-    );
-    showNotification('Password redefinida com sucesso.', 'success');
-  };
-  
   const requestPasswordReset = (email: string): { name: string; newPassword: string } | null => {
     const userToReset = collaborators.find(c => c.email.toLowerCase() === email.toLowerCase());
     if (!userToReset) {
@@ -311,9 +304,22 @@ const App: React.FC = () => {
     showNotification(`Permissões de ${targetUser.name} atualizadas.`, 'success');
   };
 
-  const updateCollaboratorProfile = (id: string, newName: string, newPass: string) => {
-    if (collaborators.some(c => c.id !== id && c.name.toLowerCase() === newName.trim().toLowerCase())) {
+  const updateCollaboratorProfile = (id: string, newName: string, newEmail: string, newPass: string) => {
+    const trimmedName = newName.trim();
+    const trimmedEmail = newEmail.trim().toLowerCase();
+
+    if (!trimmedName || !trimmedEmail) {
+      showNotification('Nome e email não podem estar em branco.', 'error');
+      return;
+    }
+    
+    if (collaborators.some(c => c.id !== id && c.name.toLowerCase() === trimmedName.toLowerCase())) {
       showNotification('Já existe um colaborador com este nome.', 'error');
+      return;
+    }
+
+    if (collaborators.some(c => c.id !== id && c.email.toLowerCase() === trimmedEmail)) {
+      showNotification('Este email já está a ser utilizado.', 'error');
       return;
     }
 
@@ -322,7 +328,8 @@ const App: React.FC = () => {
         if (c.id === id) {
           const updatedCollaborator = {
             ...c,
-            name: newName.trim(),
+            name: trimmedName,
+            email: trimmedEmail,
             password: newPass ? newPass : c.password,
           };
 
@@ -393,7 +400,13 @@ const App: React.FC = () => {
           />
         );
       case 'reports':
-        return <Reports allInteractions={interactions} collaborators={collaborators} showNotification={showNotification} />;
+        return <Reports 
+            allInteractions={interactions} 
+            collaborators={collaborators} 
+            showNotification={showNotification} 
+            currentCollaborator={currentCollaborator}
+            updateInteraction={updateInteraction}
+        />;
       case 'admin':
         return (
           <Admin
@@ -404,7 +417,6 @@ const App: React.FC = () => {
             onDelete={deleteCollaborator}
             onToggleAdmin={toggleAdminStatus}
             onResetInteractions={resetCollaboratorInteractions}
-            onResetPassword={resetUserPassword}
             onUpdateProfile={updateCollaboratorProfile}
           />
         );
