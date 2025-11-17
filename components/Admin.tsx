@@ -1,7 +1,8 @@
 
+
 import React, { useState, useRef } from 'react';
 import { Collaborator, PRIMARY_ADMIN_ID } from '../types';
-import { UsersIcon, CheckCircleIcon, XCircleIcon, CogIcon, ShieldCheckIcon, TrashIcon, RotateCcwIcon } from './icons';
+import { UsersIcon, CheckCircleIcon, XCircleIcon, CogIcon, ShieldCheckIcon, TrashIcon, RotateCcwIcon, AlertTriangleIcon } from './icons';
 
 interface ManageUserModalProps {
   user: Collaborator;
@@ -19,6 +20,12 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [confirmation, setConfirmation] = useState<{
+    message: string;
+    onConfirm: () => void;
+    confirmText: string;
+    confirmClass: string;
+  } | null>(null);
   
   const handlePasswordReset = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,10 +54,15 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
   }
 
   const handleDeleteUser = () => {
-    if (window.confirm(`Tem a certeza que deseja eliminar permanentemente o utilizador "${user.name}"? TODOS os seus registos serão apagados. Esta ação é irreversível.`)) {
-      onDelete(user.id);
-      onClose();
-    }
+    setConfirmation({
+      message: `Tem a certeza que deseja eliminar permanentemente o utilizador "${user.name}"? TODOS os seus registos serão apagados. Esta ação é irreversível.`,
+      onConfirm: () => {
+        onDelete(user.id);
+        onClose();
+      },
+      confirmText: 'Sim, Eliminar',
+      confirmClass: 'bg-red-600 hover:bg-red-700'
+    });
   }
 
   const handleToggleAdmin = () => {
@@ -59,10 +71,15 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
   }
   
   const handleResetInteractions = () => {
-    if (window.confirm(`Tem a certeza que deseja eliminar TODOS os registos de atendimento de "${user.name}"? Esta ação é irreversível.`)) {
-      onResetInteractions(user.id);
-      onClose();
-    }
+    setConfirmation({
+      message: `Tem a certeza que deseja eliminar TODOS os registos de atendimento de "${user.name}"? Esta ação é irreversível.`,
+      onConfirm: () => {
+        onResetInteractions(user.id);
+        onClose();
+      },
+      confirmText: 'Sim, Eliminar Registos',
+      confirmClass: 'bg-amber-500 hover:bg-amber-600'
+    });
   }
 
   if (isSelf) {
@@ -95,69 +112,97 @@ const ManageUserModal: React.FC<ManageUserModalProps> = ({ user, isSelf, onClose
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4 transition-opacity" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg space-y-6 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-start">
-            <h3 className="text-xl font-bold text-slate-800">Gerir Utilizador: <span className="text-blue-600">{user.name}</span></h3>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+    <>
+      {confirmation && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-[60] p-4" onClick={() => setConfirmation(null)}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-xl font-bold text-slate-800 flex items-center">
+                  <AlertTriangleIcon className="w-6 h-6 mr-3 text-red-500"/>
+                  Confirmação Necessária
+              </h3>
+              <p className="text-slate-600">{confirmation.message}</p>
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                  <button onClick={() => setConfirmation(null)} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-4 py-2 rounded-lg">
+                      Cancelar
+                  </button>
+                  <button
+                      onClick={() => {
+                          confirmation.onConfirm();
+                          setConfirmation(null);
+                      }}
+                      className={`text-white font-semibold px-4 py-2 rounded-lg ${confirmation.confirmClass}`}
+                  >
+                      {confirmation.confirmText}
+                  </button>
+              </div>
+          </div>
         </div>
-        
-        <form onSubmit={handlePasswordReset} className="space-y-3 border-t pt-4">
-          <h4 className="font-semibold text-slate-700">Redefinir Password</h4>
-          <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="new-pass">Nova Password</label>
-            <input id="new-pass" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="••••••••" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="confirm-pass">Confirmar Nova Password</label>
-            <input id="confirm-pass" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="••••••••" />
-          </div>
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-          <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors">Redefinir Password</button>
-        </form>
+      )}
 
-        {user.id !== PRIMARY_ADMIN_ID && (
-          <>
-            <div className="space-y-3 border-t pt-4">
-              <h4 className="font-semibold text-slate-700">Permissões</h4>
-              <div className="flex items-center justify-between">
-                <p>Estatuto: <span className={`font-bold ${user.isAdmin ? 'text-blue-600' : 'text-slate-600'}`}>{user.isAdmin ? 'Administrador' : 'Utilizador'}</span></p>
-                <button 
-                  onClick={handleToggleAdmin}
-                  className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-4 py-2 rounded-lg transition-colors"
-                >
-                  <ShieldCheckIcon className="w-5 h-5" />
-                  {user.isAdmin ? 'Remover Admin' : 'Promover a Admin'}
-                </button>
-              </div>
+      <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4 transition-opacity" onClick={onClose}>
+        <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg space-y-6 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+          <div className="flex justify-between items-start">
+              <h3 className="text-xl font-bold text-slate-800">Gerir Utilizador: <span className="text-blue-600">{user.name}</span></h3>
+              <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+          </div>
+          
+          <form onSubmit={handlePasswordReset} className="space-y-3 border-t pt-4">
+            <h4 className="font-semibold text-slate-700">Redefinir Password</h4>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="new-pass">Nova Password</label>
+              <input id="new-pass" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="••••••••" />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="confirm-pass">Confirmar Nova Password</label>
+              <input id="confirm-pass" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="••••••••" />
+            </div>
+            {error && <p className="text-red-600 text-sm">{error}</p>}
+            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors">Redefinir Password</button>
+          </form>
 
-            <div className="space-y-3 border-t border-red-300 pt-4 bg-red-50 p-4 rounded-lg">
-              <h4 className="font-semibold text-red-800">Zona de Perigo</h4>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                  onClick={handleResetInteractions}
-                  className="flex-1 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
-                >
-                  <RotateCcwIcon className="w-5 h-5"/> Eliminar Registos
-                </button>
-                <button
-                  onClick={handleDeleteUser}
-                  className="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
-                >
-                 <TrashIcon className="w-5 h-5" /> Eliminar Utilizador
-                </button>
+          {user.id !== PRIMARY_ADMIN_ID && (
+            <>
+              <div className="space-y-3 border-t pt-4">
+                <h4 className="font-semibold text-slate-700">Permissões</h4>
+                <div className="flex items-center justify-between">
+                  <p>Estatuto: <span className={`font-bold ${user.isAdmin ? 'text-blue-600' : 'text-slate-600'}`}>{user.isAdmin ? 'Administrador' : 'Utilizador'}</span></p>
+                  <button 
+                    onClick={handleToggleAdmin}
+                    className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-4 py-2 rounded-lg transition-colors"
+                  >
+                    <ShieldCheckIcon className="w-5 h-5" />
+                    {user.isAdmin ? 'Remover Admin' : 'Promover a Admin'}
+                  </button>
+                </div>
               </div>
-              <p className="text-xs text-red-600 mt-2">Estas ações são irreversíveis.</p>
-            </div>
-          </>
-        )}
-        
-        <div className="text-right border-t pt-4">
-          <button onClick={onClose} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-4 py-2 rounded-lg transition-colors">Fechar</button>
+
+              <div className="space-y-3 border-t border-red-300 pt-4 bg-red-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-red-800">Zona de Perigo</h4>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={handleResetInteractions}
+                    className="flex-1 flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                  >
+                    <RotateCcwIcon className="w-5 h-5"/> Eliminar Registos
+                  </button>
+                  <button
+                    onClick={handleDeleteUser}
+                    className="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                  >
+                   <TrashIcon className="w-5 h-5" /> Eliminar Utilizador
+                  </button>
+                </div>
+                <p className="text-xs text-red-600 mt-2">Estas ações são irreversíveis.</p>
+              </div>
+            </>
+          )}
+          
+          <div className="text-right border-t pt-4">
+            <button onClick={onClose} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-4 py-2 rounded-lg transition-colors">Fechar</button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
