@@ -22,7 +22,7 @@ const Notification: React.FC<{ notification: NotificationType | null, onDismiss:
     const Icon = isSuccess ? CheckCircleIcon : XCircleIcon;
 
     return (
-        <div className={`fixed top-5 right-5 ${bgColor} text-white py-3 px-5 rounded-lg shadow-lg z-50 flex items-center gap-4 animate-fade-in-up`}>
+        <div className={`fixed bottom-5 right-5 ${bgColor} text-white py-3 px-5 rounded-lg shadow-lg z-50 flex items-center gap-4 animate-fade-in-up`}>
             <Icon className="w-6 h-6" />
             <span>{notification.message}</span>
             {notification.undoAction && (
