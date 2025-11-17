@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Collaborator, PRIMARY_ADMIN_ID } from '../types';
+
+import React, { useState, useRef } from 'react';
+import { Collaborator } from '../types';
 import { UserPlusIcon, LogInIcon, MailIcon } from './icons';
 
 interface PasswordRecoveryModalProps {
@@ -32,7 +33,7 @@ const PasswordRecoveryModal: React.FC<PasswordRecoveryModalProps> = ({ onClose, 
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            className="w-full px-4 py-2 border rounded-lg"
+                            className="w-full px-4 py-2 border border-slate-300 rounded-lg"
                             required
                             autoFocus
                         />
@@ -53,210 +54,186 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin, addCollaborator, requestPasswordReset, collaborators }) => {
-  const [isCreating, setIsCreating] = useState(false);
-  const [isRecovering, setIsRecovering] = useState(false);
-  
-  // Login State
-  const [loginName, setLoginName] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+    // states for login
+    const [name, setName] = useState('');
+    const [password, setPassword] = useState('');
+    const passwordInputRef = useRef<HTMLInputElement>(null);
 
-  // Creation State
-  const [createName, setCreateName] = useState('');
-  const [createEmail, setCreateEmail] = useState('');
-  const [createPassword, setCreatePassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  
-  // Information Request State
-  const [infoMessage, setInfoMessage] = useState('');
-  
-  const handlePasswordRecovery = (email: string) => {
-    const result = requestPasswordReset(email);
-    if (result) {
-        setLoginName(result.name);
-        setLoginPassword(result.newPassword);
-        setIsRecovering(false); // Fecha o modal
-        setIsCreating(false); // Garante que o formulário de login está visível
-    }
-    // A notificação de erro já é tratada em App.tsx
-  };
+    // states for registration
+    const [newName, setNewName] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [newEmail, setNewEmail] = useState('');
+    const [isRegisterOpen, setIsRegisterOpen] = useState(false);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onLogin(loginName, loginPassword);
-  };
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!createName.trim() || !createEmail.trim() || !createPassword || !confirmPassword) {
-        // A notificação de erro será tratada na função principal se os campos estiverem vazios.
-        // Adicionamos uma verificação simples para o caso de passwords não coincidirem.
-        if (createPassword !== confirmPassword) {
-            // Idealmente, a função `addCollaborator` faria essa validação e mostraria o erro.
-            // Por simplicidade, assumimos que a lógica principal pode ser chamada e falhará.
+    // modal state
+    const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+
+    const handleLoginSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+        onLogin(name, password);
+    };
+
+    const handleRegisterSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        addCollaborator(newName, newPassword, newEmail);
+        setNewName('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setNewEmail('');
+        setIsRegisterOpen(false);
+    };
+
+    const handlePasswordRecover = (email: string) => {
+        const result = requestPasswordReset(email);
+        if (result) {
+            setName(result.name);
+            setPassword(result.newPassword);
+            setShowRecoveryModal(false);
         }
+    };
+    
+    const approvedCollaborators = collaborators.filter(c => c.status === 'aprovado');
+    
+    const getInitials = (name: string): string => {
+        if (!name) return '?';
+        const parts = name.trim().split(' ');
+        if (parts.length > 1 && parts[parts.length - 1]) {
+            return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+        }
+        return name.substring(0, 2).toUpperCase();
     }
     
-    if (createPassword !== confirmPassword) {
-        // A lógica principal em `App.tsx` não verifica isto, então é melhor tratar aqui.
-        // Contudo, para centralizar, vamos assumir que `addCollaborator` faz tudo.
-        // Para um exemplo real, a validação de passwords seria melhor aqui.
-    }
+    const nameToColor = (name: string): string => {
+        if (!name) return '777777';
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) {
+            hash = name.charCodeAt(i) + ((hash << 5) - hash);
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+        return "00000".substring(0, 6 - c.length) + c;
+    };
 
-    addCollaborator(createName, createPassword, createEmail);
-    // A notificação e a lógica de UI (resetar form, etc.) serão tratadas no App.tsx
-    // com base no sucesso da operação.
-  };
-  
-  const resetCreateForm = () => {
-    setCreateName('');
-    setCreateEmail('');
-    setCreatePassword('');
-    setConfirmPassword('');
-  }
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+            {showRecoveryModal && <PasswordRecoveryModal onClose={() => setShowRecoveryModal(false)} onRecover={handlePasswordRecover} />}
 
-  const toggleView = () => {
-    setIsCreating(!isCreating);
-    setLoginName('');
-    setLoginPassword('');
-    resetCreateForm();
-  }
-
-  const handleInformationRequest = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!infoMessage.trim()) return;
-
-    const recipient = 'braga.turismo.2024@gmail.com';
-    const subject = 'Notificações - App Atendimentos';
-    const body = infoMessage;
-
-    window.location.href = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-
-    setInfoMessage('');
-  };
-  
-  const approvedUsers = collaborators.filter(c => c.status === 'aprovado' && c.id !== PRIMARY_ADMIN_ID);
-
-  return (
-    <>
-      {isRecovering && <PasswordRecoveryModal onClose={() => setIsRecovering(false)} onRecover={handlePasswordRecovery} />}
-      <div className="flex flex-col items-center justify-center min-h-[90vh] p-4">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl sm:text-5xl font-bold text-slate-900">Posto de Turismo</h1>
-          <p className="mt-3 text-lg text-slate-600">
-            {isCreating ? 'Crie uma nova conta para começar.' : 'Inicie sessão para continuar.'}
-          </p>
-        </div>
-        
-        <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-
-          <div className="w-full bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
-            {isCreating ? (
-              // --- REGISTRATION FORM ---
-              <form onSubmit={handleCreateSubmit} className="space-y-4">
-                <h2 className="text-2xl font-bold text-slate-800 flex items-center mb-6"><UserPlusIcon className="w-7 h-7 mr-3"/> Criar Conta</h2>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="create-name">Nome de Utilizador</label>
-                  <input id="create-name" type="text" value={createName} onChange={(e) => setCreateName(e.target.value)} className="w-full px-4 py-2 border rounded-lg" required autoFocus/>
+            <div className="max-w-6xl w-full mx-auto">
+                <div className="text-center mb-8">
+                    <h1 className="text-4xl font-bold text-slate-800">Registo de Atendimentos Turísticos</h1>
+                    <p className="text-slate-600 mt-2">Bem-vindo. Por favor, inicie sessão ou registe-se para continuar.</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="create-email">Email</label>
-                  <input id="create-email" type="email" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} className="w-full px-4 py-2 border rounded-lg" required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="create-password">Password</label>
-                  <input id="create-password" type="password" value={createPassword} onChange={(e) => setCreatePassword(e.target.value)} className="w-full px-4 py-2 border rounded-lg" required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="confirm-password">Confirmar Password</label>
-                  <input id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-4 py-2 border rounded-lg" required />
-                </div>
-                <button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg">Criar Conta</button>
-              </form>
-            ) : (
-              // --- LOGIN FORM ---
-              <form onSubmit={handleLoginSubmit} className="space-y-4">
-                <h2 className="text-2xl font-bold text-slate-800 flex items-center mb-6"><LogInIcon className="w-7 h-7 mr-3"/> Iniciar Sessão</h2>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="login-name">Nome de Utilizador</label>
-                  <input id="login-name" type="text" value={loginName} onChange={(e) => setLoginName(e.target.value)} className="w-full px-4 py-2 border rounded-lg" required autoFocus/>
-                </div>
-                <div>
-                  <div className="flex justify-between items-baseline">
-                      <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="login-password">Password</label>
-                      <button type="button" onClick={() => setIsRecovering(true)} className="text-xs text-blue-600 hover:underline">Esqueceu-se da password?</button>
-                  </div>
-                  <input id="login-password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full px-4 py-2 border rounded-lg" required />
-                </div>
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg">Entrar</button>
-              </form>
-            )}
 
-            <div className="mt-6 pt-6 border-t border-slate-200 text-center">
-              <button onClick={toggleView} className="text-blue-600 hover:text-blue-800 font-semibold transition-colors">
-                {isCreating ? 'Já tem uma conta? Iniciar Sessão' : 'Não tem conta? Crie um novo registo.'}
-              </button>
-            </div>
-          </div>
-          
-          <div className="space-y-8">
-             <div className="w-full bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
-               <h2 className="text-2xl font-bold text-slate-800 mb-6">Utilizadores Aprovados</h2>
-               {approvedUsers.length > 0 ? (
-                  <ul className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
-                      {approvedUsers.map(user => (
-                          <li 
-                              key={user.id}
-                              onClick={() => setLoginName(user.name)}
-                              className="p-3 bg-slate-50 hover:bg-blue-100 rounded-lg cursor-pointer transition-colors"
-                          >
-                              <span className="font-semibold text-slate-700">{user.name}</span>
-                              {user.isAdmin && <span className="ml-2 text-xs font-bold text-white bg-blue-600 px-2 py-0.5 rounded-full">Admin</span>}
-                          </li>
-                      ))}
-                  </ul>
-               ) : (
-                  <p className="text-slate-500">Não existem utilizadores aprovados para além da conta de gestão.</p>
-               )}
-             </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    {/* LEFT COLUMN: AUTHENTICATION */}
+                    <div className="bg-white p-8 rounded-xl shadow-md border border-slate-200 space-y-6">
+                        {/* Login Form */}
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800 mb-4 flex items-center"><LogInIcon className="w-6 h-6 mr-3 text-blue-600"/> Iniciar Sessão</h2>
+                            <form onSubmit={handleLoginSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="username">Nome de Utilizador</label>
+                                    <input id="username" type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" required autoFocus />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="password">Password</label>
+                                    <input ref={passwordInputRef} id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" required />
+                                </div>
+                                <div className="text-right">
+                                    <button type="button" onClick={() => setShowRecoveryModal(true)} className="text-sm text-blue-600 hover:underline">Esqueceu-se da password?</button>
+                                </div>
+                                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-colors">Entrar</button>
+                            </form>
+                        </div>
+                        
+                        <div className="border-t border-slate-200"></div>
 
-             <div className="w-full bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
-                  <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center">
-                      <MailIcon className="w-6 h-6 mr-3 text-slate-500" />
-                      Pedido de Informações
-                  </h2>
-                  <p className="text-slate-600 mb-4 text-sm">
-                      Tem alguma dúvida ou precisa de ajuda? Envie-nos uma mensagem diretamente para o nosso email de suporte.
-                  </p>
-                  <form onSubmit={handleInformationRequest}>
-                      <div>
-                          <label htmlFor="info-message" className="block text-sm font-medium text-slate-700 mb-1">A sua mensagem</label>
-                          <textarea 
-                            id="info-message"
-                            rows={3}
-                            className="w-full px-4 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Escreva a sua questão aqui..."
-                            value={infoMessage}
-                            onChange={(e) => setInfoMessage(e.target.value)}
-                            required
-                          ></textarea>
+                        {/* Register Form (Minimized) */}
+                        <div>
+                             {isRegisterOpen ? (
+                                <div className="animate-fade-in">
+                                     <h2 className="text-2xl font-bold text-slate-800 mb-4 flex items-center"><UserPlusIcon className="w-6 h-6 mr-3 text-green-600"/> Pedido de Registo</h2>
+                                     <form onSubmit={handleRegisterSubmit} className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="new-username">Nome de Utilizador</label>
+                                            <input id="new-username" type="text" value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500" required />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="new-email">Email</label>
+                                            <input id="new-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500" required />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="new-password">Password</label>
+                                            <input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500" required />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="confirm-password">Confirmar Password</label>
+                                            <input id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500" required />
+                                        </div>
+                                        <button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-colors">Pedir Registo</button>
+                                     </form>
+                                      <div className="text-center mt-4">
+                                        <button onClick={() => setIsRegisterOpen(false)} className="text-sm text-slate-600 hover:underline">
+                                            Ocultar formulário
+                                        </button>
+                                    </div>
+                                </div>
+                             ) : (
+                                 <div className="text-center">
+                                    <p className="text-slate-600">Ainda não tem conta?</p>
+                                    <button onClick={() => setIsRegisterOpen(true)} className="font-semibold text-blue-600 hover:underline">
+                                        Faça aqui o seu pedido de registo
+                                    </button>
+                                 </div>
+                             )}
+                        </div>
+                    </div>
+
+                    {/* RIGHT COLUMN: APPROVED USERS */}
+                     {approvedCollaborators.length > 0 && (
+                      <div className="bg-white p-8 rounded-xl shadow-md border border-slate-200">
+                        <h3 className="text-2xl font-bold text-slate-800 mb-6 text-center">Acesso Rápido</h3>
+                        <div className="flex flex-wrap gap-x-6 gap-y-8 justify-center">
+                          {approvedCollaborators.map(c => (
+                            <button
+                              key={c.id}
+                              onClick={() => { setName(c.name); setPassword(''); passwordInputRef.current?.focus(); }}
+                              className="flex flex-col items-center gap-2 text-center group w-28 transform transition-transform duration-200 hover:-translate-y-1"
+                              title={`Iniciar sessão como ${c.name}`}
+                            >
+                              <div 
+                                className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-2xl transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg"
+                                style={{ backgroundColor: `#${nameToColor(c.name)}` }}
+                              >
+                                {getInitials(c.name)}
+                              </div>
+                              <div className="flex flex-col items-center">
+                                <span className="font-semibold text-sm text-slate-700 group-hover:text-blue-600 break-words w-full">{c.name}</span>
+                                {c.isAdmin && (
+                                  <span className="text-xs font-bold text-white bg-blue-600 px-2 py-0.5 rounded-full mt-1">Admin</span>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <button 
-                        type="submit" 
-                        className="mt-4 w-full bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 rounded-lg flex items-center justify-center transition-colors disabled:bg-slate-400"
-                        disabled={!infoMessage.trim()}
-                      >
-                          <MailIcon className="w-5 h-5 mr-2" />
-                          Enviar Pedido por Email
-                      </button>
-                  </form>
-             </div>
-          </div>
-        </div>
+                    )}
+                </div>
 
-      </div>
-    </>
-  );
+                {/* BOTTOM ROW: INFORMATION */}
+                <div className="bg-white p-8 rounded-xl shadow-md border border-slate-200">
+                    <div className="space-y-4 text-center">
+                        <h2 className="text-2xl font-bold text-slate-800 mb-4 flex items-center justify-center"><MailIcon className="w-6 h-6 mr-3 text-amber-600"/> Pedido de Informações</h2>
+                        <p className="text-slate-600">Para questões, recuperação de conta manual ou outros assuntos, por favor contacte o administrador através do email:</p>
+                        <a href="mailto:braga.turismo.2024@gmail.com" className="font-semibold text-blue-600 hover:underline break-all">braga.turismo.2024@gmail.com</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 export default Login;

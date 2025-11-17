@@ -197,11 +197,11 @@ const App: React.FC = () => {
     setCollaborators(prev => [...prev, newCollaborator]);
     showNotification('Registo efetuado. Aguarde aprovação de um administrador.', 'success');
 
-    const recipient = 'braga.turismo.2024@gmail.com';
-    const subject = 'Novo Pedido de Aprovação de Registo';
-    const body = `Um novo utilizador registou-se e aguarda aprovação.\n\nNome: ${newCollaborator.name}\nEmail: ${newCollaborator.email}\n\nPor favor, aceda ao painel de administração para aprovar ou recusar o registo.`;
+    // const recipient = 'braga.turismo.2024@gmail.com';
+    // const subject = 'Novo Pedido de Aprovação de Registo';
+    // const body = `Um novo utilizador registou-se e aguarda aprovação.\n\nNome: ${newCollaborator.name}\nEmail: ${newCollaborator.email}\n\nPor favor, aceda ao painel de administração para aprovar ou recusar o registo.`;
     
-    window.open(`mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+    // window.open(`mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
   };
 
   const approveCollaborator = (id: string) => {
