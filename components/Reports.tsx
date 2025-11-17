@@ -1,8 +1,9 @@
 
 
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Interaction, Collaborator, ReportPeriod, PRIMARY_ADMIN_ID } from '../types';
-import { ALL_NATIONALITIES } from '../constants';
+import { ALL_NATIONALITIES, ORDERED_NATIONALITIES_FOR_EXPORT } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, MapIcon, EditIcon, BookOpenIcon, ClockIcon } from './icons';
 
@@ -491,7 +492,36 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
     };
 
-    createSheet(nationalityData, "Nacionalidades");
+    const orderedNationalityDataForExport = [];
+    const nationalityDataMap = new Map(nationalityData.map(item => [item.Nacionalidade, item.Visitantes]));
+    const orderedSet = new Set(ORDERED_NATIONALITIES_FOR_EXPORT);
+
+    // Add nationalities in the specified order
+    for (const nat of ORDERED_NATIONALITIES_FOR_EXPORT) {
+        if (nationalityDataMap.has(nat)) {
+            orderedNationalityDataForExport.push({ Nacionalidade: nat, Visitantes: nationalityDataMap.get(nat) as number });
+        }
+    }
+
+    // Handle "Outros"
+    let othersCount = 0;
+    for (const [nat, count] of nationalityDataMap.entries()) {
+        if (!orderedSet.has(nat)) {
+            othersCount += count;
+        }
+    }
+
+    if (othersCount > 0) {
+        orderedNationalityDataForExport.push({ Nacionalidade: 'Outros', Visitantes: othersCount });
+    }
+
+    // Handle "Total"
+    const totalVisitors = Array.from(nationalityDataMap.values()).reduce((sum, count) => sum + count, 0);
+    if (totalVisitors > 0) {
+        orderedNationalityDataForExport.push({ Nacionalidade: 'Total', Visitantes: totalVisitors });
+    }
+
+    createSheet(orderedNationalityDataForExport, "Nacionalidades");
     createSheet(visitReasonData, "Motivos de Visita");
     createSheet(lengthOfStayData, "Duração da Estadia");
 

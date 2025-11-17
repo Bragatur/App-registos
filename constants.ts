@@ -1,4 +1,5 @@
 
+
 export const QUICK_ACCESS_NATIONALITIES: string[] = [
     'Portugal',
     'Espanha',
@@ -13,6 +14,10 @@ export const QUICK_ACCESS_NATIONALITIES: string[] = [
     'Polónia',
     'Irlanda',
     'Suíça',
+];
+
+export const ORDERED_NATIONALITIES_FOR_EXPORT: string[] = [
+    'Alemanha', 'Bélgica', 'Brasil', 'Espanha', 'EUA', 'França', 'Itália', 'Países Baixos', 'Polónia', 'Reino Unido', 'Portugal', 'África do Sul', 'Albânia', 'Andorra', 'Angola', 'Argentina', 'Arménia', 'Austrália', 'Áustria', 'Bangladesh', 'Bielorrússia', 'Bolívia', 'Bósnia e Herzegovina', 'Bulgária', 'Cabo Verde', 'Canadá', 'Chile', 'China', 'Chipre', 'Colômbia', 'Coreia do Sul', 'Croácia', 'Dinamarca', 'Egito', 'Equador', 'Emirados Árabes Unidos', 'Eslováquia', 'Eslovénia', 'Estónia', 'Filipinas', 'Finlândia', 'Geórgia', 'Grécia', 'Hungria', 'Índia', 'Indonésia', 'Irão', 'Iraque', 'Irlanda', 'Islândia', 'Israel', 'Japão', 'Letónia', 'Lituânia', 'Luxemburgo', 'Malásia', 'Malta', 'Marrocos', 'México', 'Moçambique', 'Moldávia', 'Mónaco', 'Montenegro', 'Noruega', 'Nova Zelândia', 'Peru', 'República Checa', 'Roménia', 'Rússia', 'Sérvia', 'Singapura', 'Suécia', 'Suíça', 'Tailândia', 'Taiwan', 'Turquia', 'Ucrânia', 'Uruguai', 'Venezuela'
 ];
 
 export const ALL_NATIONALITIES: string[] = [

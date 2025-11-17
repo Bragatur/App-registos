@@ -1,8 +1,10 @@
 
 
+
 import React, { useState, useRef } from 'react';
 import { Collaborator, PRIMARY_ADMIN_ID, Interaction } from '../types';
 import { UsersIcon, CheckCircleIcon, XCircleIcon, CogIcon, ShieldCheckIcon, TrashIcon, RotateCcwIcon, AlertTriangleIcon, FileSpreadsheetIcon } from './icons';
+import { ORDERED_NATIONALITIES_FOR_EXPORT } from '../constants';
 
 // Declaração para a biblioteca XLSX carregada via CDN
 declare const XLSX: any;
@@ -306,7 +308,22 @@ const Admin: React.FC<AdminProps> = ({
                 allNationalities.add(interaction.nationality);
             });
 
-            const sortedNationalities = Array.from(allNationalities).sort((a, b) => a.localeCompare(b));
+            const orderedSet = new Set(ORDERED_NATIONALITIES_FOR_EXPORT);
+            const orderedNatsInReport: string[] = [];
+            const otherNats: string[] = [];
+
+            allNationalities.forEach(nat => {
+                if (!orderedSet.has(nat)) {
+                    otherNats.push(nat);
+                }
+            });
+
+            ORDERED_NATIONALITIES_FOR_EXPORT.forEach(orderedNat => {
+                if (allNationalities.has(orderedNat)) {
+                    orderedNatsInReport.push(orderedNat);
+                }
+            });
+            
             const monthOrder = ['Jan.', 'Fev.', 'Mar.', 'Abr.', 'Mai.', 'Jun.', 'Jul.', 'Ago.', 'Set.', 'Out.', 'Nov.', 'Dez.'];
             
             const sortedMonthYears = Object.keys(dataByMonth).sort((a, b) => {
@@ -320,7 +337,7 @@ const Admin: React.FC<AdminProps> = ({
             const header = ['Nacionalidade', ...sortedMonthYears, 'Total'];
             sheetData.push(header);
 
-            sortedNationalities.forEach(nat => {
+            orderedNatsInReport.forEach(nat => {
                 const row: (string | number)[] = [nat];
                 let rowTotal = 0;
                 sortedMonthYears.forEach(my => {
@@ -332,10 +349,22 @@ const Admin: React.FC<AdminProps> = ({
                 sheetData.push(row);
             });
 
+            if (otherNats.length > 0) {
+                const outrosRow: (string | number)[] = ['Outros'];
+                let outrosRowTotal = 0;
+                sortedMonthYears.forEach(my => {
+                    const outrosMonthTotal = otherNats.reduce((sum, nat) => sum + (dataByMonth[my]?.[nat] || 0), 0);
+                    outrosRow.push(outrosMonthTotal);
+                    outrosRowTotal += outrosMonthTotal;
+                });
+                outrosRow.push(outrosRowTotal);
+                sheetData.push(outrosRow);
+            }
+
             const footer: (string | number)[] = ['Total'];
             let grandTotal = 0;
-            sortedMonthYears.forEach((my, index) => {
-                const monthTotal = sortedNationalities.reduce((sum, nat) => sum + (dataByMonth[my]?.[nat] || 0), 0);
+            sortedMonthYears.forEach((my) => {
+                const monthTotal = Array.from(allNationalities).reduce((sum, nat) => sum + (dataByMonth[my]?.[nat] || 0), 0);
                 footer.push(monthTotal);
                 grandTotal += monthTotal;
             });
@@ -344,7 +373,7 @@ const Admin: React.FC<AdminProps> = ({
 
             const ws = XLSX.utils.aoa_to_sheet(sheetData);
             const colWidths = header.map(h => ({ wch: Math.max(h.length, 12) }));
-            colWidths[0].wch = Math.max(...sortedNationalities.map(n => n.length), 'Nacionalidade'.length) + 2;
+            colWidths[0].wch = Math.max(...orderedNatsInReport.map(n => n.length), 'Nacionalidade'.length, 'Outros'.length, 'Total'.length) + 2;
             ws['!cols'] = colWidths;
             
             XLSX.utils.book_append_sheet(wb, ws, user.name.substring(0, 31));
