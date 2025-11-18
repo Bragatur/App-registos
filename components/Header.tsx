@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Collaborator, View } from '../types';
-import { ChartBarIcon, EditIcon, LogOutIcon, ShieldCheckIcon, KeyIcon } from './icons';
+import { ChartBarIcon, EditIcon, LogOutIcon, ShieldCheckIcon, KeyIcon, AnalysisIcon } from './icons';
 
 interface HeaderProps {
   collaborator: Collaborator;
@@ -48,6 +48,10 @@ const Header: React.FC<HeaderProps> = ({ collaborator, currentView, setView, onL
                     <ChartBarIcon className="w-5 h-5" />
                     <span>Relatórios</span>
                 </NavButton>
+                <NavButton onClick={() => setView('analysis')} isActive={currentView === 'analysis'} title="Análise detalhada dos dados">
+                    <AnalysisIcon className="w-5 h-5" />
+                    <span>Análise</span>
+                </NavButton>
                  {collaborator.isAdmin && (
                     <NavButton onClick={() => setView('admin')} isActive={currentView === 'admin'} title="Painel de administração">
                         <ShieldCheckIcon className="w-5 h-5" />
@@ -82,7 +86,7 @@ const Header: React.FC<HeaderProps> = ({ collaborator, currentView, setView, onL
         </div>
 
         {/* Mobile Nav Below */}
-        <nav className="sm:hidden flex items-center gap-4 bg-slate-100 p-1 rounded-lg mb-4 justify-start">
+        <nav className="sm:hidden flex items-center gap-4 bg-slate-100 p-1 rounded-lg mb-4 justify-start overflow-x-auto">
             <NavButton onClick={() => setView('dashboard')} isActive={currentView === 'dashboard'} title="Registar e gerir atendimentos">
                 <EditIcon className="w-5 h-5" />
                 <span>Atendimentos</span>
@@ -90,6 +94,10 @@ const Header: React.FC<HeaderProps> = ({ collaborator, currentView, setView, onL
             <NavButton onClick={() => setView('reports')} isActive={currentView === 'reports'} title="Ver relatórios e estatísticas">
                 <ChartBarIcon className="w-5 h-5" />
                 <span>Relatórios</span>
+            </NavButton>
+            <NavButton onClick={() => setView('analysis')} isActive={currentView === 'analysis'} title="Análise detalhada dos dados">
+                <AnalysisIcon className="w-5 h-5" />
+                <span>Análise</span>
             </NavButton>
             {collaborator.isAdmin && (
                 <NavButton onClick={() => setView('admin')} isActive={currentView === 'admin'} title="Painel de administração">

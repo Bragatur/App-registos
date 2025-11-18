@@ -8,6 +8,7 @@ import Dashboard from './components/Dashboard';
 import Reports from './components/Reports';
 import Header from './components/Header';
 import Admin from './components/Admin';
+import Analysis from './components/Analysis';
 import { CheckCircleIcon, XCircleIcon, KeyIcon } from './components/icons';
 
 const Notification: React.FC<{ notification: NotificationType | null, onDismiss: () => void }> = ({ notification, onDismiss }) => {
@@ -149,6 +150,21 @@ const App: React.FC = () => {
             : c
         );
       }
+
+      // Add a test user if not present
+      const testUserExists = updatedCollaborators.some(c => c.name.toLowerCase() === 'teste');
+      if (!testUserExists) {
+        const testUser: Collaborator = {
+          id: 'colab_test_user',
+          name: 'teste',
+          email: 'teste@example.com',
+          password: 'test',
+          isAdmin: false,
+          status: 'aprovado',
+        };
+        updatedCollaborators.push(testUser);
+      }
+      
       return updatedCollaborators;
     });
   }, [setCollaborators]);
@@ -203,8 +219,8 @@ const App: React.FC = () => {
   };
 
   const addCollaborator = (name: string, password: string, email: string) => {
-    if (name.trim().toLowerCase() === 'admin') {
-      showNotification('O nome de utilizador "admin" é reservado.', 'error');
+    if (name.trim().toLowerCase() === 'admin' || name.trim().toLowerCase() === 'teste') {
+      showNotification(`O nome de utilizador "${name.trim()}" é reservado.`, 'error');
       return;
     }
     if (collaborators.some(c => c.name.toLowerCase() === name.trim().toLowerCase())) {
@@ -449,6 +465,13 @@ const App: React.FC = () => {
             showNotification={showNotification} 
             currentCollaborator={currentCollaborator}
             updateInteraction={updateInteraction}
+        />;
+      case 'analysis':
+        return <Analysis 
+            allInteractions={interactions} 
+            collaborators={collaborators} 
+            currentCollaborator={currentCollaborator}
+            showNotification={showNotification} 
         />;
       case 'admin':
         return (

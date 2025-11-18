@@ -25,7 +25,7 @@ export interface Interaction {
   lengthOfStay?: string;
 }
 
-export type View = 'login' | 'dashboard' | 'reports' | 'admin';
+export type View = 'login' | 'dashboard' | 'reports' | 'admin' | 'analysis';
 
 export type ReportPeriod = 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
 

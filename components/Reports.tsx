@@ -118,6 +118,44 @@ const KpiCard: React.FC<{ title: string; value: string | number; icon: React.Rea
     </div>
 );
 
+const ChartDataTable: React.FC<{ title: string; data: any[]; columnHeaders: { key: string; label: string }[] }> = ({ title, data, columnHeaders }) => {
+    if (data.length === 0) {
+        return (
+            <div>
+                <h4 className="text-md font-semibold text-slate-700 mb-2 text-center">{title}</h4>
+                <div className="border border-slate-200 rounded-lg p-4 text-center text-slate-500">
+                    Sem dados.
+                </div>
+            </div>
+        );
+    }
+    return (
+        <div>
+            <h4 className="text-md font-semibold text-slate-700 mb-2 text-center">{title}</h4>
+            <div className="overflow-auto max-h-72 border border-slate-200 rounded-lg">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-100 sticky top-0 z-10">
+                        <tr>
+                            {columnHeaders.map(header => (
+                                <th key={header.key} className="p-2 font-semibold text-slate-600">{header.label}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {data.map((row, index) => (
+                            <tr key={index} className="border-b border-slate-200 last:border-b-0">
+                                {columnHeaders.map(header => (
+                                    <td key={`${index}-${header.key}`} className="p-2">{row[header.key]}</td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
 const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showNotification, currentCollaborator, updateInteraction }) => {
   const [period, setPeriod] = useState<ReportPeriod>('monthly');
   const [startDate, setStartDate] = useState<string>('');
@@ -719,6 +757,44 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
                         </ResponsiveContainer>
                         ) : ( <p className="text-center text-slate-500 py-10">Sem dados de duração da estadia.</p> )}
                     </div>
+                </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                <h3 className="text-xl font-bold mb-6 text-slate-800 text-center">Dados Resumidos dos Gráficos</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <ChartDataTable
+                        title="Visitantes por Nacionalidade"
+                        data={nationalityData}
+                        columnHeaders={[
+                            { key: 'Nacionalidade', label: 'Nacionalidade' },
+                            { key: 'Visitantes', label: 'Visitantes' }
+                        ]}
+                    />
+                    <ChartDataTable
+                        title="Tendência de Visitantes"
+                        data={trendData}
+                        columnHeaders={[
+                            { key: 'date', label: 'Data' },
+                            { key: 'visitantes', label: 'Visitantes' }
+                        ]}
+                    />
+                    <ChartDataTable
+                        title="Top Motivos de Visita"
+                        data={visitReasonData}
+                        columnHeaders={[
+                            { key: 'Motivo', label: 'Motivo' },
+                            { key: 'Visitantes', label: 'Visitantes' }
+                        ]}
+                    />
+                    <ChartDataTable
+                        title="Top Duração da Estadia"
+                        data={lengthOfStayData}
+                        columnHeaders={[
+                            { key: 'Duração', label: 'Duração' },
+                            { key: 'Visitantes', label: 'Visitantes' }
+                        ]}
+                    />
                 </div>
             </div>
 
