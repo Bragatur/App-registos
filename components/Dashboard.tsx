@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Collaborator, Interaction } from '../types';
-import { QUICK_ACCESS_NATIONALITIES, ALL_NATIONALITIES } from '../constants';
+import { QUICK_ACCESS_NATIONALITIES, ALL_NATIONALITIES, VISIT_REASONS } from '../constants';
 import { PlusIcon, EditIcon, SearchIcon, BookOpenIcon, ClockIcon, ArrowUpIcon, ArrowDownIcon, AlertTriangleIcon } from './icons';
 
 interface DashboardProps {
@@ -98,7 +98,7 @@ const InteractionRow: React.FC<{
                                 value={nationality}
                                 onChange={(e) => setNationality(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                list="nationalities-all-edit"
+                                list="nationalities-all"
                                 className="col-span-2 px-2 py-1 border border-blue-400 rounded-md font-semibold"
                             />
                         </div>
@@ -108,6 +108,7 @@ const InteractionRow: React.FC<{
                             onChange={(e) => setVisitReason(e.target.value)}
                             onKeyDown={handleKeyDown}
                             placeholder="Motivo da visita (opcional)"
+                            list="visit-reasons"
                             className="w-full px-2 py-1 border border-slate-300 rounded-md"
                         />
                          <input
@@ -198,9 +199,12 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
 
     // Sorting
     sortableItems.sort((a, b) => {
+        const dateA = new Date(a.timestamp).getTime();
+        const dateB = new Date(b.timestamp).getTime();
+        const countA = a.count || 1;
+        const countB = b.count || 1;
+
         if (sortConfig.key === 'timestamp') {
-            const dateA = new Date(a.timestamp).getTime();
-            const dateB = new Date(b.timestamp).getTime();
             return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
         }
         if (sortConfig.key === 'nationality') {
@@ -209,8 +213,6 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
                 : b.nationality.localeCompare(a.nationality);
         }
         if (sortConfig.key === 'count') {
-            const countA = a.count || 1;
-            const countB = b.count || 1;
             return sortConfig.direction === 'asc' ? countA - countB : countB - countA;
         }
         return 0;
@@ -290,8 +292,8 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
         <datalist id="nationalities-all">
             {ALL_NATIONALITIES.map(nat => <option key={nat} value={nat} />)}
         </datalist>
-        <datalist id="nationalities-all-edit">
-            {ALL_NATIONALITIES.map(nat => <option key={nat} value={nat} />)}
+        <datalist id="visit-reasons">
+            {VISIT_REASONS.map(reason => <option key={reason} value={reason} />)}
         </datalist>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -351,7 +353,8 @@ const Dashboard: React.FC<DashboardProps> = ({ collaborator, interactions, addIn
                                 type="text"
                                 value={visitReason}
                                 onChange={(e) => setVisitReason(e.target.value)}
-                                placeholder="Ex: Férias, história..."
+                                list="visit-reasons"
+                                placeholder="Pesquisar ou selecionar..."
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                         </div>

@@ -1,21 +1,13 @@
-
-
-
-
-
-
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Interaction, Collaborator, ReportPeriod, PRIMARY_ADMIN_ID } from '../types';
-import { ALL_NATIONALITIES, ORDERED_NATIONALITIES_FOR_EXPORT } from '../constants';
+import { ALL_NATIONALITIES, ORDERED_NATIONALITIES_FOR_EXPORT, VISIT_REASONS } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, MapIcon, EditIcon, BookOpenIcon, ClockIcon } from './icons';
+import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, EditIcon, BookOpenIcon, ClockIcon } from './icons';
 
 // Declaração para bibliotecas globais carregadas via CDN
 declare const XLSX: any;
 declare const jsPDF: any;
 declare const html2canvas: any;
-declare const jsVectorMap: any;
 
 // FIX: Add jspdf to the global Window interface to fix type error for CDN library.
 declare global {
@@ -23,59 +15,6 @@ declare global {
     jspdf: any;
   }
 }
-
-// Mapeamento de nomes de países para códigos ISO 3166-1 alpha-2
-const countryNameToCode: { [key: string]: string } = {
-    'Portugal': 'PT', 'Espanha': 'ES', 'França': 'FR', 'Reino Unido': 'GB', 'Alemanha': 'DE',
-    'Bélgica': 'BE', 'Brasil': 'BR', 'EUA': 'US', 'Itália': 'IT', 'Países Baixos': 'NL',
-    'Polónia': 'PL', 'Irlanda': 'IE', 'Suíça': 'CH', 'Canadá': 'CA', 'Austrália': 'AU',
-    'Argentina': 'AR', 'China': 'CN', 'Japão': 'JP', 'Rússia': 'RU', 'Índia': 'IN',
-    'África do Sul': 'ZA', 'Suécia': 'SE', 'Noruega': 'NO', 'Dinamarca': 'DK', 'Áustria': 'AT',
-    'México': 'MX', 'Coreia do Sul': 'KR', 'Estados Unidos': 'US',
-};
-
-const WorldMapChart: React.FC<{ data: { [key: string]: number } }> = ({ data }) => {
-    const mapRef = useRef<HTMLDivElement>(null);
-    const mapInstance = useRef<any>(null);
-
-    useEffect(() => {
-        if (mapRef.current && data && Object.keys(data).length > 0) {
-            if (mapInstance.current) {
-                mapInstance.current.destroy();
-            }
-            mapInstance.current = new jsVectorMap({
-                selector: mapRef.current,
-                map: 'world',
-                zoomOnScroll: false,
-                series: {
-                    regions: [{
-                        values: data,
-                        scale: ['#d1e6fa', '#3b82f6', '#1e40af'],
-                        normalizeFunction: 'polynomial',
-                    }]
-                },
-                regionStyle: {
-                    initial: { fill: '#e4e4e7' },
-                    hover: { fill: '#f59e0b' }
-                },
-                onRegionTooltipShow: (_: any, tooltip: any, code: string) => {
-                    tooltip.css({ backgroundColor: '#1f2937', color: 'white' });
-                    const count = data[code] || 'N/A';
-                    tooltip.text(`${tooltip.text()} - ${count} Visitantes`, true);
-                },
-            });
-        }
-
-        return () => {
-            if (mapInstance.current) {
-                mapInstance.current.destroy();
-                mapInstance.current = null;
-            }
-        };
-    }, [data]);
-
-    return <div ref={mapRef} style={{ width: '100%', height: '400px' }}></div>;
-};
 
 interface EditInteractionModalProps {
     interaction: Interaction;
@@ -132,7 +71,7 @@ const EditInteractionModal: React.FC<EditInteractionModalProps> = ({ interaction
                     </div>
                      <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="edit-visitReason">Motivo da Visita (Opcional)</label>
-                        <input id="edit-visitReason" type="text" value={visitReason} onChange={(e) => setVisitReason(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+                        <input id="edit-visitReason" type="text" value={visitReason} onChange={(e) => setVisitReason(e.target.value)} list="visit-reasons" className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
                     </div>
                      <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="edit-lengthOfStay">Tempo de Estadia (Opcional)</label>
@@ -195,6 +134,8 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
   // Pagination for admin table
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+
+  const CHART_COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#8b5cf6', '#6b7280', '#14b8a6', '#eab308', '#d946ef', '#06b6d4'];
 
   const periodLabels: Record<ReportPeriod, string> = {
     weekly: 'Últimos 7 dias',
@@ -266,7 +207,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
       
       const collaboratorMatch = isAdmin 
           ? (selectedCollaborator === 'all' || interaction.collaboratorId === selectedCollaborator)
-          : true;
+          : (interaction.collaboratorId === currentCollaborator?.id);
       
       return startDateMatch && endDateMatch && collaboratorMatch;
     });
@@ -324,24 +265,12 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
       .sort((a, b) => b.Visitantes - a.Visitantes);
   }, [interactionsForChartsAndKpis]);
   
-  const mapData = useMemo(() => {
-    const top10 = nationalityData.slice(0, 10);
-    const data: { [key: string]: number } = {};
-    top10.forEach(item => {
-        const code = countryNameToCode[item.Nacionalidade];
-        if (code) {
-            data[code] = item.Visitantes;
-        }
-    });
-    return data;
-  }, [nationalityData]);
-
   const kpis = useMemo(() => {
     const totalVisitors = nationalityData.reduce((sum, item) => sum + item.Visitantes, 0);
     const totalInteractions = interactionsForChartsAndKpis.length;
     const averageGroupSize = totalInteractions > 0 ? (totalVisitors / totalInteractions).toFixed(2) : 0;
     const topNationality = nationalityData.length > 0 ? nationalityData[0].Nacionalidade : 'N/A';
-    return { totalVisitors, totalInteractions, averageGroupSize, topNationality };
+    return { totalVisitors, averageGroupSize, topNationality };
   }, [nationalityData, interactionsForChartsAndKpis]);
   
   const pieChartData = useMemo(() => {
@@ -461,7 +390,6 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
         ["Data de Exportação", new Date().toLocaleString('pt-PT')], [],
         ["Indicadores Chave de Desempenho (KPIs)"], ["Métrica", "Valor"],
         ["Total de Visitantes", kpis.totalVisitors],
-        ["Total de Atendimentos", kpis.totalInteractions],
         ["Média por Grupo", kpis.averageGroupSize],
         ["Nacionalidade Top", kpis.topNationality],
     ];
@@ -474,7 +402,6 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     const visualDashboardData = [
       ["Dashboard Visual"], [],
       ["Nota:", "Para uma experiência visual completa com gráficos, por favor, utilize a exportação para PDF."], [],
-      ["Mapa-Mundo", "Disponível no PDF"],
       ["Tendência de Visitantes", "Disponível no PDF"],
       ["Distribuição de Nacionalidades", "Disponível no PDF"],
       ["Visitantes por Nacionalidade", "Disponível no PDF"],
@@ -509,9 +436,11 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
 
     // Handle "Outros"
     let othersCount = 0;
+    // FIX: Cast `nat` to string and `count` to number because `nationalityDataMap` is of type `Map<unknown, unknown>`,
+    // which causes type errors in strict mode.
     for (const [nat, count] of nationalityDataMap.entries()) {
-        if (!orderedSet.has(nat)) {
-            othersCount += count;
+        if (!orderedSet.has(nat as string)) {
+            othersCount += count as number;
         }
     }
 
@@ -520,7 +449,10 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     }
 
     // Handle "Total"
-    const totalVisitors = Array.from(nationalityDataMap.values()).reduce((sum, count) => sum + count, 0);
+    // FIX: Add types to the reduce function to correctly calculate `totalVisitors` as a number. This resolves
+    // type errors when using the `+` and `>` operators.
+    // FIX: Explicitly set the generic type for `reduce` to `number` to ensure `totalVisitors` is not inferred as `unknown`.
+    const totalVisitors = Array.from(nationalityDataMap.values()).reduce<number>((sum, count) => sum + (count as number), 0);
     if (totalVisitors > 0) {
         orderedNationalityDataForExport.push({ Nacionalidade: 'Total', Visitantes: totalVisitors });
     }
@@ -565,13 +497,13 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
 
     doc.autoTable({
         startY: yPos,
-        head: [['KPIs', `Visitantes: ${kpis.totalVisitors}`, `Atendimentos: ${kpis.totalInteractions}`, `Média: ${kpis.averageGroupSize}`, `Top: ${kpis.topNationality}`]],
+        head: [['KPIs', `Visitantes: ${kpis.totalVisitors}`, `Média: ${kpis.averageGroupSize}`, `Top: ${kpis.topNationality}`]],
         theme: 'grid', headStyles: { fillColor: [59, 130, 246] }
     });
     yPos = (doc.autoTable.previous.finalY as number) + 12;
 
-    const chartIds = ['map-chart', 'trend-chart', 'pie-chart', 'nationality-chart', 'reason-chart', 'stay-chart'];
-    const chartTitles = ['Top Nacionalidades no Mapa', 'Tendência de Visitantes', 'Distribuição de Nacionalidades', 'Visitantes por Nacionalidade', 'Top Motivos de Visita', 'Top Duração da Estadia'];
+    const chartIds = ['trend-chart', 'pie-chart', 'nationality-chart', 'reason-chart', 'stay-chart'];
+    const chartTitles = ['Tendência de Visitantes', 'Distribuição de Nacionalidades', 'Visitantes por Nacionalidade', 'Top Motivos de Visita', 'Top Duração da Estadia'];
 
     for (let i = 0; i < chartIds.length; i++) {
         const imgData = await getChartAsImage(chartIds[i]);
@@ -627,8 +559,6 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     showNotification("Relatório PDF exportado com sucesso!", "success");
   };
 
-  const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280'];
-
   return (
     <div className="max-w-7xl mx-auto space-y-8">
         {editingInteraction && (
@@ -643,6 +573,9 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
         )}
         <datalist id="nationalities-all">
             {ALL_NATIONALITIES.map(nat => <option key={nat} value={nat} />)}
+        </datalist>
+        <datalist id="visit-reasons">
+            {VISIT_REASONS.map(reason => <option key={reason} value={reason} />)}
         </datalist>
 
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -696,16 +629,10 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
         
         {interactionsForChartsAndKpis.length > 0 ? (
         <div className="space-y-8">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <KpiCard title="Total de Visitantes" value={kpis.totalVisitors} icon={<UsersIcon className="w-6 h-6"/>}/>
-                <KpiCard title="Total de Atendimentos" value={kpis.totalInteractions} icon={<ClipboardListIcon className="w-6 h-6"/>}/>
                 <KpiCard title="Média por Grupo" value={kpis.averageGroupSize} icon={<ScaleIcon className="w-6 h-6"/>}/>
                 <KpiCard title="Nacionalidade Top" value={kpis.topNationality} icon={<GlobeIcon className="w-6 h-6"/>}/>
-            </div>
-
-            <div id="map-chart" className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-                <h3 className="text-lg font-semibold text-slate-700 mb-4 flex items-center"><MapIcon className="w-5 h-5 mr-2 text-blue-600" /> Top 10 Nacionalidades no Mapa</h3>
-                <WorldMapChart data={mapData} />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -717,7 +644,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
                             <XAxis dataKey="date" tick={{fontSize: 12}}/>
                             <YAxis allowDecimals={false}/>
                             <Tooltip />
-                            <Line type="monotone" dataKey="visitantes" stroke="#3b82f6" strokeWidth={2} name="Visitantes" />
+                            <Line type="monotone" dataKey="visitantes" stroke={CHART_COLORS[0]} strokeWidth={2} name="Visitantes" />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
@@ -726,7 +653,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
                      <ResponsiveContainer width="100%" height={300}>
                         <PieChart>
                             <Pie data={pieChartData} dataKey="visitantes" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                                 {pieChartData.map((entry, index) => <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />)}
+                                 {pieChartData.map((entry, index) => <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
                             </Pie>
                             <Tooltip formatter={(value) => [value, "Visitantes"]}/>
                             <Legend/>
@@ -744,7 +671,11 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
                         <YAxis type="category" dataKey="name" tick={{fontSize: 12}} width={150} interval={0} />
                         <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
                         <Legend verticalAlign="top" wrapperStyle={{paddingBottom: '20px'}} />
-                        <Bar dataKey="visitantes" fill="#3b82f6" name="Nº de Visitantes" />
+                        <Bar dataKey="visitantes" name="Nº de Visitantes">
+                            {nationalityData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                            ))}
+                        </Bar>
                     </BarChart>
                 </ResponsiveContainer>
             </div>
@@ -761,7 +692,11 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
                                 <XAxis type="number" allowDecimals={false}/>
                                 <YAxis type="category" dataKey="name" width={150} tick={{fontSize: 12}}/>
                                 <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
-                                <Bar dataKey="visitantes" fill="#10b981" name="Nº de Visitantes" />
+                                <Bar dataKey="visitantes" name="Nº de Visitantes">
+                                     {visitReasonData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                    ))}
+                                </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                         ): ( <p className="text-center text-slate-500 py-10">Sem dados de motivo da visita.</p>) }
@@ -775,7 +710,11 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
                                 <XAxis type="number" allowDecimals={false}/>
                                 <YAxis type="category" dataKey="name" width={120} tick={{fontSize: 12}}/>
                                 <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
-                                <Bar dataKey="visitantes" fill="#f59e0b" name="Nº de Visitantes" />
+                                <Bar dataKey="visitantes" name="Nº de Visitantes">
+                                    {lengthOfStayData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                    ))}
+                                </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                         ) : ( <p className="text-center text-slate-500 py-10">Sem dados de duração da estadia.</p> )}
