@@ -259,6 +259,8 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
         interaction => interaction.collaboratorId !== PRIMARY_ADMIN_ID
     );
 
+    const collaboratorMap = new Map(collaborators.map(c => [c.id, c.name]));
+
     return interactionsWithoutAdmin
       .filter(interaction => {
           const interactionDate = new Date(interaction.timestamp);
@@ -271,8 +273,9 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
           
           return startDateMatch && endDateMatch && collaboratorMatch;
       })
+      .map(i => ({...i, collaboratorName: collaboratorMap.get(i.collaboratorId) || 'N/A' }))
       .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [allInteractions, period, selectedCollaborator, startDate, endDate, currentCollaborator, isAdmin]);
+  }, [allInteractions, collaborators, period, selectedCollaborator, startDate, endDate, currentCollaborator, isAdmin]);
   
   // Pagination logic
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -414,91 +417,82 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
         return;
     }
     setIsExporting(true);
+    showNotification("A gerar o seu relatório XLSX...", "success");
 
     const wb = XLSX.utils.book_new();
+    const boldStyle = { font: { bold: true } };
     
+    // --- 1. Folha de Resumo ---
     const periodLabel = period === 'custom' && (startDate || endDate) 
         ? `De ${startDate || '(início)'} a ${endDate || '(fim)'}` 
         : periodLabels[period];
 
     const summaryData = [
-        ["Relatório de Atendimentos Turísticos"], [],
+        [{ v: "Relatório de Atendimentos Turísticos", s: { font: { bold: true, sz: 16 } } }],
+        [],
+        [{ v: "Filtros Aplicados", s: boldStyle }],
         ["Período", periodLabel],
         ["Colaborador", selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name],
-        ["Data de Exportação", new Date().toLocaleString('pt-PT')], [],
-        ["Indicadores Chave de Desempenho (KPIs)"], ["Métrica", "Valor"],
+        ["Data de Exportação", new Date().toLocaleString('pt-PT')], 
+        [],
+        [{ v: "Indicadores Chave (KPIs)", s: boldStyle }],
         ["Total de Visitantes", kpis.totalVisitors],
         ["Média por Grupo", kpis.averageGroupSize],
         ["Nacionalidade Top", kpis.topNationality],
     ];
     const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-    wsSummary['!cols'] = [{ wch: 40 }, { wch: 20 }];
-    wsSummary["A1"].s = { font: { bold: true, sz: 16 } };
-    wsSummary["A7"].s = { font: { bold: true, sz: 14 } };
+    wsSummary['!cols'] = [{ wch: 25 }, { wch: 40 }];
     XLSX.utils.book_append_sheet(wb, wsSummary, "Resumo");
     
-    const visualDashboardData = [
-      ["Dashboard Visual"], [],
-      ["Nota:", "Para uma experiência visual completa com gráficos, por favor, utilize a exportação para PDF."], [],
-      ["Tendência de Visitantes", "Disponível no PDF"],
-      ["Distribuição de Nacionalidades", "Disponível no PDF"],
-      ["Visitantes por Nacionalidade", "Disponível no PDF"],
-      ["Top Motivos de Visita", "Disponível no PDF"],
-      ["Top Duração da Estadia", "Disponível no PDF"],
-    ];
-    const wsVisual = XLSX.utils.aoa_to_sheet(visualDashboardData);
-    wsVisual['!cols'] = [{ wch: 30 }, { wch: 50 }];
-    wsVisual["A1"].s = { font: { bold: true, sz: 16 } };
-    XLSX.utils.book_append_sheet(wb, wsVisual, "Dashboard Visual");
-
-    const createSheet = (data: any[], sheetName: string) => {
-        if (data.length === 0) return;
-        const ws = XLSX.utils.json_to_sheet(data);
-        const colWidths = Object.keys(data[0] || {}).map(key => ({
-            wch: Math.max(key.length, ...data.map(row => String(row[key] || '').length)) + 2
+    // --- 2. Folha de Dados Detalhados ---
+    if (interactionsForDetailedTable.length > 0) {
+        const detailedDataExport = interactionsForDetailedTable.map(item => ({
+            'Colaborador': item.collaboratorName,
+            'Nacionalidade': item.nationality,
+            'Nº Pessoas': item.count,
+            'Motivo da Visita': item.visitReason || '',
+            'Tempo de Estadia': item.lengthOfStay || '',
+            'Data do Atendimento': new Date(item.timestamp).toLocaleString('pt-PT'),
+            'Data do Registo': new Date(item.createdAt).toLocaleString('pt-PT'),
         }));
-        ws['!cols'] = colWidths;
+        const wsDetailed = XLSX.utils.json_to_sheet(detailedDataExport);
+        wsDetailed['!cols'] = Object.keys(detailedDataExport[0]).map(key => ({
+            wch: Math.max(key.length, ...detailedDataExport.map(row => String(row[key as keyof typeof row] || '').length)) + 2
+        }));
+        XLSX.utils.book_append_sheet(wb, wsDetailed, "Dados Detalhados");
+    }
+
+    // --- 3. Folhas de Dados Agregados (com estilo) ---
+    const createStyledSheet = (data: any[], sheetName: string, headers: string[]) => {
+        if (data.length === 0) return;
+
+        const totalRow = { [headers[0]]: "Total", [headers[1]]: data.reduce((sum, item) => sum + item[headers[1]], 0) };
+        const dataWithTotal = [...data, totalRow];
+        
+        const ws = XLSX.utils.json_to_sheet(dataWithTotal, { header: headers });
+        
+        // Estilo para cabeçalho
+        headers.forEach((h, i) => {
+            const cellRef = XLSX.utils.encode_cell({c: i, r: 0});
+            if(ws[cellRef]) ws[cellRef].s = boldStyle;
+        });
+        // Estilo para a linha de total
+        const totalRowIndex = data.length + 1;
+        headers.forEach((h, i) => {
+             const cellRef = XLSX.utils.encode_cell({c: i, r: totalRowIndex});
+             if(ws[cellRef]) ws[cellRef].s = boldStyle;
+        });
+        
+        ws['!cols'] = headers.map(key => ({
+            wch: Math.max(key.length, ...dataWithTotal.map(row => String(row[key] || '').length)) + 2
+        }));
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
     };
 
-    const orderedNationalityDataForExport = [];
-    const nationalityDataMap = new Map(nationalityData.map(item => [item.Nacionalidade, item.Visitantes]));
-    const orderedSet = new Set(ORDERED_NATIONALITIES_FOR_EXPORT);
-
-    // Add nationalities in the specified order
-    for (const nat of ORDERED_NATIONALITIES_FOR_EXPORT) {
-        if (nationalityDataMap.has(nat)) {
-            orderedNationalityDataForExport.push({ Nacionalidade: nat, Visitantes: nationalityDataMap.get(nat) as number });
-        }
-    }
-
-    // Handle "Outros"
-    let othersCount = 0;
-    // FIX: Cast `nat` to string and `count` to number because `nationalityDataMap` is of type `Map<unknown, unknown>`,
-    // which causes type errors in strict mode.
-    for (const [nat, count] of nationalityDataMap.entries()) {
-        if (!orderedSet.has(nat as string)) {
-            othersCount += count as number;
-        }
-    }
-
-    if (othersCount > 0) {
-        orderedNationalityDataForExport.push({ Nacionalidade: 'Outros', Visitantes: othersCount });
-    }
-
-    // Handle "Total"
-    // FIX: Add types to the reduce function to correctly calculate `totalVisitors` as a number. This resolves
-    // type errors when using the `+` and `>` operators.
-    // FIX: Explicitly set the generic type for `reduce` to `number` to ensure `totalVisitors` is not inferred as `unknown`.
-    const totalVisitors = Array.from(nationalityDataMap.values()).reduce<number>((sum, count) => sum + (count as number), 0);
-    if (totalVisitors > 0) {
-        orderedNationalityDataForExport.push({ Nacionalidade: 'Total', Visitantes: totalVisitors });
-    }
-
-    createSheet(orderedNationalityDataForExport, "Nacionalidades");
-    createSheet(visitReasonData, "Motivos de Visita");
-    createSheet(lengthOfStayData, "Duração da Estadia");
-
+    createStyledSheet(nationalityData, "Visitantes por Nacionalidade", ["Nacionalidade", "Visitantes"]);
+    createStyledSheet(visitReasonData, "Motivos de Visita", ["Motivo", "Visitantes"]);
+    createStyledSheet(lengthOfStayData, "Duração da Estadia", ["Duração", "Visitantes"]);
+    
     XLSX.writeFile(wb, `${getFilename()}.xlsx`);
     setIsExporting(false);
     showNotification("Relatório XLSX exportado com sucesso!", "success");
@@ -531,7 +525,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     doc.setTextColor(100);
     doc.text(`Período: ${periodLabel}`, pageMargin, yPos);
     doc.text(`Colaborador: ${selectedCollaborator === 'all' ? 'Todos' : collaborators.find(c => c.id === selectedCollaborator)?.name}`, pageWidth / 2, yPos);
-    yPos += 10;
+    yPos += 6;
 
     doc.autoTable({
         startY: yPos,
@@ -540,62 +534,118 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     });
     yPos = (doc.autoTable.previous.finalY as number) + 12;
 
-    const chartIds = ['trend-chart', 'pie-chart', 'nationality-chart', 'reason-chart', 'stay-chart'];
-    const chartTitles = ['Tendência de Visitantes', 'Distribuição de Nacionalidades', 'Visitantes por Nacionalidade', 'Top Motivos de Visita', 'Top Duração da Estadia'];
-
-    for (let i = 0; i < chartIds.length; i++) {
-        const imgData = await getChartAsImage(chartIds[i]);
-        if (imgData) {
-            const imgProps = doc.getImageProperties(imgData);
-            const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
-
-            if (yPos + imgHeight + 15 > doc.internal.pageSize.getHeight()) {
-                doc.addPage();
-                yPos = 20;
-            }
-
-            doc.setFontSize(14);
-            doc.text(chartTitles[i], pageMargin, yPos);
-            yPos += 6;
-            doc.addImage(imgData, 'PNG', pageMargin, yPos, contentWidth, imgHeight, '', 'FAST');
-            yPos += imgHeight + 12;
+    const checkPageBreak = (heightNeeded: number) => {
+        if (yPos + heightNeeded > doc.internal.pageSize.getHeight() - pageMargin) {
+            doc.addPage();
+            yPos = pageMargin;
+            return true;
         }
+        return false;
     }
     
-    const addDataToPdf = (title: string, data: any[]) => {
+    // Gerar todas as imagens dos gráficos primeiro
+    const chartIds = ['trend-chart', 'pie-chart', 'nationality-chart', 'reason-chart', 'stay-chart'];
+    const chartElements = chartIds.map(id => document.getElementById(id)).filter(Boolean);
+    const chartImages = await Promise.all(chartElements.map(el => getChartAsImage(el!.id)));
+
+    // Adicionar gráficos ao PDF
+    const addImageToPdf = (imgData: string, title: string, width: number, x: number) => {
+        const imgProps = doc.getImageProperties(imgData);
+        const imgHeight = (imgProps.height * width) / imgProps.width;
+
+        doc.setFontSize(12);
+        doc.setTextColor(50);
+        doc.text(title, x, yPos);
+        doc.addImage(imgData, 'PNG', x, yPos + 4, width, imgHeight, '', 'FAST');
+        return imgHeight + 8; // Retorna altura total usada pela imagem e título
+    };
+
+    // Gráfico de tendência (largura total)
+    if(chartImages[0]) {
+        checkPageBreak(80);
+        const trendHeight = addImageToPdf(chartImages[0], "Tendência de Visitantes", contentWidth, pageMargin);
+        yPos += trendHeight + 8;
+    }
+    
+    // Gráficos lado a lado
+    const smallChartWidth = (contentWidth / 2) - 5;
+    const pieImage = chartImages[1];
+    const reasonImage = chartImages[3];
+    const stayImage = chartImages[4];
+
+    if (pieImage && reasonImage) {
+        checkPageBreak(80);
+        const h1 = addImageToPdf(pieImage, 'Distribuição de Nacionalidades', smallChartWidth, pageMargin);
+        const h2 = addImageToPdf(reasonImage, 'Top Motivos de Visita', smallChartWidth, pageMargin + smallChartWidth + 10);
+        yPos += Math.max(h1, h2) + 8;
+    }
+
+    // Gráfico de nacionalidades (largura total) e estadia
+    if (chartImages[2]) {
+        checkPageBreak(120);
+        const natHeight = addImageToPdf(chartImages[2], 'Visitantes por Nacionalidade', contentWidth, pageMargin);
+        yPos += natHeight + 8;
+    }
+
+    if (stayImage) {
+        checkPageBreak(80);
+        const stayHeight = addImageToPdf(stayImage, 'Top Duração da Estadia', smallChartWidth, pageMargin);
+        yPos += stayHeight + 8;
+    }
+
+    const addDataToPdf = (title: string, data: any[], headers: string[]) => {
         if (data.length > 0) {
-            if (yPos + 20 > (doc.internal.pageSize.getHeight() as number)) {
-                doc.addPage();
-                yPos = 20;
-            }
+            checkPageBreak(25);
             doc.setFontSize(14);
+            doc.setTextColor(0);
             doc.text(title, pageMargin, yPos);
-            yPos += 8;
+            yPos += 2;
             doc.autoTable({
                 startY: yPos,
-                head: [Object.keys(data[0])],
-                // FIX: The `body` of `autoTable` was receiving mixed types, which can cause issues. 
-                // Convert all cell values to strings for consistent display and to avoid type errors.
+                head: [headers],
                 body: data.map(row => Object.values(row).map(value => String(value ?? ''))),
                 theme: 'striped', headStyles: { fillColor: [45, 55, 72] },
-                didDrawPage: (hookData: any) => { 
-                    // FIX: Safely update yPos for multi-page tables by casting to number.
-                    yPos = (hookData.cursor.y as number);
-                }
+                didDrawPage: (hookData: any) => { yPos = hookData.cursor.y; }
             });
-            // FIX: After the table, use the reliable `finalY` property (cast to number) and add a margin.
-            yPos = (doc.autoTable.previous.finalY as number) + 15;
+            yPos = (doc.autoTable.previous.finalY as number) + 10;
         }
     };
     
-    addDataToPdf("Visitantes por Nacionalidade", nationalityData);
-    addDataToPdf("Top Motivos de Visita", visitReasonData);
-    addDataToPdf("Top Duração da Estadia", lengthOfStayData);
+    addDataToPdf("Resumo: Visitantes por Nacionalidade", nationalityData, ["Nacionalidade", "Visitantes"]);
+    addDataToPdf("Resumo: Top Motivos de Visita", visitReasonData, ["Motivo", "Visitantes"]);
+    addDataToPdf("Resumo: Top Duração da Estadia", lengthOfStayData, ["Duração", "Visitantes"]);
+
+    // Adicionar tabela de dados detalhados
+    if (interactionsForDetailedTable.length > 0) {
+        checkPageBreak(30);
+        doc.setFontSize(14);
+        doc.text("Todos os Registos do Período", pageMargin, yPos);
+        yPos += 2;
+        doc.autoTable({
+            startY: yPos,
+            head: [['Colaborador', 'Nacionalidade', 'Nº Pessoas', 'Motivo Visita', 'Estadia', 'Data']],
+            body: interactionsForDetailedTable.map(item => [
+                item.collaboratorName,
+                item.nationality,
+                item.count,
+                item.visitReason || '-',
+                item.lengthOfStay || '-',
+                new Date(item.timestamp).toLocaleString('pt-PT'),
+            ]),
+            theme: 'grid',
+            headStyles: { fillColor: [45, 55, 72] },
+            styles: { fontSize: 8, cellPadding: 1.5 },
+            columnStyles: {
+                2: { halign: 'center' },
+            }
+        });
+    }
 
     doc.save(`${getFilename()}.pdf`);
     setIsExporting(false);
     showNotification("Relatório PDF exportado com sucesso!", "success");
   };
+
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -829,7 +879,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
                                         </div>
                                     </td>
                                     <td className="p-3 text-sm text-slate-500">{new Date(interaction.timestamp).toLocaleString('pt-PT')}</td>
-                                    {isAdmin && <td className="p-3 text-sm">{collaborators.find(c => c.id === interaction.collaboratorId)?.name || 'N/A'}</td>}
+                                    {isAdmin && <td className="p-3 text-sm">{interaction.collaboratorName}</td>}
                                     <td className="p-3 text-right">
                                         <button 
                                             onClick={() => setEditingInteraction(interaction)} 
