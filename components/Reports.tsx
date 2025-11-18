@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Interaction, Collaborator, ReportPeriod, PRIMARY_ADMIN_ID } from '../types';
 import { ALL_NATIONALITIES, ORDERED_NATIONALITIES_FOR_EXPORT, VISIT_REASONS } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, EditIcon, BookOpenIcon, ClockIcon } from './icons';
+import { FileSpreadsheetIcon, FileTextIcon, UsersIcon, ClipboardListIcon, GlobeIcon, ScaleIcon, SearchIcon, EditIcon, BookOpenIcon, ClockIcon, CameraIcon } from './icons';
 
 // Declaração para bibliotecas globais carregadas via CDN
 declare const XLSX: any;
@@ -398,6 +398,28 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     return `relatorio_${periodString}_${collaboratorName}`;
   }
 
+  const handleSaveChartAsImage = async (elementId: string, filename: string) => {
+    const element = document.getElementById(elementId);
+    if (!element) {
+      showNotification(`Elemento do gráfico #${elementId} não encontrado.`, "error");
+      return;
+    }
+    try {
+        showNotification("A gerar imagem do gráfico...", "success");
+        const canvas = await html2canvas(element, { backgroundColor: '#ffffff', scale: 2 });
+        const image = canvas.toDataURL('image/png', 1.0);
+        const link = document.createElement('a');
+        link.href = image;
+        link.download = `${filename}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (error) {
+        console.error("Error saving chart as image:", error);
+        showNotification("Ocorreu um erro ao guardar o gráfico.", "error");
+    }
+  };
+
   const getChartAsImage = async (elementId: string): Promise<string | null> => {
     const element = document.getElementById(elementId);
     if (!element) return null;
@@ -544,7 +566,7 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
     }
     
     // Gerar todas as imagens dos gráficos primeiro
-    const chartIds = ['trend-chart', 'pie-chart', 'nationality-chart', 'reason-chart', 'stay-chart'];
+    const chartIds = ['trend-chart-container', 'pie-chart-container', 'nationality-chart-container', 'reason-chart-container', 'stay-chart-container'];
     const chartElements = chartIds.map(id => document.getElementById(id)).filter(Boolean);
     const chartImages = await Promise.all(chartElements.map(el => getChartAsImage(el!.id)));
 
@@ -724,88 +746,113 @@ const Reports: React.FC<ReportsProps> = ({ allInteractions, collaborators, showN
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                <div id="trend-chart" className="lg:col-span-3 bg-white p-6 rounded-xl shadow-md border border-slate-200">
-                     <h3 className="text-lg font-semibold text-slate-700 mb-4">Tendência de Visitantes</h3>
-                     <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={trendData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-                            <XAxis dataKey="date" tick={{fontSize: 12}}/>
-                            <YAxis allowDecimals={false}/>
-                            <Tooltip />
-                            <Line type="monotone" dataKey="visitantes" stroke={CHART_COLORS[0]} strokeWidth={2} name="Visitantes" />
-                        </LineChart>
-                    </ResponsiveContainer>
+                <div className="lg:col-span-3 bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                     <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-slate-700">Tendência de Visitantes</h3>
+                        <button onClick={() => handleSaveChartAsImage('trend-chart-container', 'tendencia_visitantes')} className="text-slate-500 hover:text-blue-600 p-2 rounded-full hover:bg-blue-100 transition-colors" title="Guardar como Imagem"><CameraIcon className="w-5 h-5" /></button>
+                    </div>
+                    <div id="trend-chart-container">
+                        <ResponsiveContainer width="100%" height={300}>
+                            <LineChart data={trendData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false}/>
+                                <XAxis dataKey="date" tick={{fontSize: 12}}/>
+                                <YAxis allowDecimals={false}/>
+                                <Tooltip />
+                                <Line type="monotone" dataKey="visitantes" stroke={CHART_COLORS[0]} strokeWidth={2} name="Visitantes" />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
-                <div id="pie-chart" className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md border border-slate-200">
-                    <h3 className="text-lg font-semibold text-slate-700 mb-4">Distribuição de Nacionalidades</h3>
-                     <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                            <Pie data={pieChartData} dataKey="visitantes" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                                 {pieChartData.map((entry, index) => <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
-                            </Pie>
-                            <Tooltip formatter={(value) => [value, "Visitantes"]}/>
-                            <Legend/>
-                        </PieChart>
-                    </ResponsiveContainer>
+                <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-slate-700">Distribuição de Nacionalidades</h3>
+                        <button onClick={() => handleSaveChartAsImage('pie-chart-container', 'distribuicao_nacionalidades')} className="text-slate-500 hover:text-blue-600 p-2 rounded-full hover:bg-blue-100 transition-colors" title="Guardar como Imagem"><CameraIcon className="w-5 h-5" /></button>
+                    </div>
+                    <div id="pie-chart-container">
+                        <ResponsiveContainer width="100%" height={300}>
+                            <PieChart>
+                                <Pie data={pieChartData} dataKey="visitantes" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                                    {pieChartData.map((entry, index) => <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
+                                </Pie>
+                                <Tooltip formatter={(value) => [value, "Visitantes"]}/>
+                                <Legend/>
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
             </div>
 
-            <div id="nationality-chart" className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-                <h3 className="text-lg font-semibold text-slate-700 mb-4">Visitantes por Nacionalidade</h3>
-                <ResponsiveContainer width="100%" height={nationalityChartHeight}>
-                    <BarChart layout="vertical" data={nationalityData.map(d => ({ name: d.Nacionalidade, visitantes: d.Visitantes }))} margin={{ top: 5, right: 30, left: 50, bottom: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                        <XAxis type="number" allowDecimals={false} />
-                        <YAxis type="category" dataKey="name" tick={{fontSize: 12}} width={150} interval={0} />
-                        <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
-                        <Legend verticalAlign="top" wrapperStyle={{paddingBottom: '20px'}} />
-                        <Bar dataKey="visitantes" name="Nº de Visitantes">
-                            {nationalityData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                            ))}
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
+            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold text-slate-700">Visitantes por Nacionalidade</h3>
+                    <button onClick={() => handleSaveChartAsImage('nationality-chart-container', 'visitantes_nacionalidade')} className="text-slate-500 hover:text-blue-600 p-2 rounded-full hover:bg-blue-100 transition-colors" title="Guardar como Imagem"><CameraIcon className="w-5 h-5" /></button>
+                </div>
+                <div id="nationality-chart-container">
+                    <ResponsiveContainer width="100%" height={nationalityChartHeight}>
+                        <BarChart layout="vertical" data={nationalityData.map(d => ({ name: d.Nacionalidade, visitantes: d.Visitantes }))} margin={{ top: 5, right: 30, left: 50, bottom: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                            <XAxis type="number" allowDecimals={false} />
+                            <YAxis type="category" dataKey="name" tick={{fontSize: 12}} width={150} interval={0} />
+                            <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
+                            <Legend verticalAlign="top" wrapperStyle={{paddingBottom: '20px'}} />
+                            <Bar dataKey="visitantes" name="Nº de Visitantes">
+                                {nationalityData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
             </div>
             
             <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
                 <h2 className="text-2xl font-bold text-slate-800 mb-6 text-center">Análise do Perfil do Visitante</h2>
                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                    <div id="reason-chart">
-                        <h3 className="text-lg font-semibold text-slate-700 mb-4 text-center">Top Motivos de Visita</h3>
-                        {visitReasonData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={visitReasonData.map(d => ({ name: d.Motivo, visitantes: d.Visitantes }))} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
-                                <XAxis type="number" allowDecimals={false}/>
-                                <YAxis type="category" dataKey="name" width={150} tick={{fontSize: 12}}/>
-                                <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
-                                <Bar dataKey="visitantes" name="Nº de Visitantes">
-                                     {visitReasonData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                        ): ( <p className="text-center text-slate-500 py-10">Sem dados de motivo da visita.</p>) }
+                    <div>
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-slate-700 text-center w-full">Top Motivos de Visita</h3>
+                            <button onClick={() => handleSaveChartAsImage('reason-chart-container', 'top_motivos_visita')} className="text-slate-500 hover:text-blue-600 p-2 rounded-full hover:bg-blue-100 transition-colors" title="Guardar como Imagem"><CameraIcon className="w-5 h-5" /></button>
+                        </div>
+                        <div id="reason-chart-container">
+                            {visitReasonData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={visitReasonData.map(d => ({ name: d.Motivo, visitantes: d.Visitantes }))} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
+                                    <XAxis type="number" allowDecimals={false}/>
+                                    <YAxis type="category" dataKey="name" width={150} tick={{fontSize: 12}}/>
+                                    <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
+                                    <Bar dataKey="visitantes" name="Nº de Visitantes">
+                                        {visitReasonData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                            ): ( <p className="text-center text-slate-500 py-10">Sem dados de motivo da visita.</p>) }
+                        </div>
                     </div>
-                    <div id="stay-chart">
-                        <h3 className="text-lg font-semibold text-slate-700 mb-4 text-center">Top Duração da Estadia</h3>
-                        {lengthOfStayData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={lengthOfStayData.map(d => ({ name: d.Duração, visitantes: d.Visitantes }))} layout="vertical" margin={{ top: 5, right: 30, left: 30, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
-                                <XAxis type="number" allowDecimals={false}/>
-                                <YAxis type="category" dataKey="name" width={120} tick={{fontSize: 12}}/>
-                                <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
-                                <Bar dataKey="visitantes" name="Nº de Visitantes">
-                                    {lengthOfStayData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                        ) : ( <p className="text-center text-slate-500 py-10">Sem dados de duração da estadia.</p> )}
+                    <div>
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-slate-700 text-center w-full">Top Duração da Estadia</h3>
+                            <button onClick={() => handleSaveChartAsImage('stay-chart-container', 'top_duracao_estadia')} className="text-slate-500 hover:text-blue-600 p-2 rounded-full hover:bg-blue-100 transition-colors" title="Guardar como Imagem"><CameraIcon className="w-5 h-5" /></button>
+                        </div>
+                        <div id="stay-chart-container">
+                            {lengthOfStayData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={lengthOfStayData.map(d => ({ name: d.Duração, visitantes: d.Visitantes }))} layout="vertical" margin={{ top: 5, right: 30, left: 30, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
+                                    <XAxis type="number" allowDecimals={false}/>
+                                    <YAxis type="category" dataKey="name" width={120} tick={{fontSize: 12}}/>
+                                    <Tooltip formatter={(value: number) => [value, "Visitantes"]}/>
+                                    <Bar dataKey="visitantes" name="Nº de Visitantes">
+                                        {lengthOfStayData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                            ) : ( <p className="text-center text-slate-500 py-10">Sem dados de duração da estadia.</p> )}
+                        </div>
                     </div>
                 </div>
             </div>
